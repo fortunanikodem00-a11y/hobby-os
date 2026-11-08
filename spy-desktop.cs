@@ -222,10 +222,10 @@ public class Program
                         string iPath = tk.GetValue(3).ToString();
                         
                         positions[key] = new Point(x, y);
-                        if (iPath != "none") iconPaths[key] = iPath;
-                    }
-                }
-            }
-        } catch { }
-    }
+if (iPath != "none") iconPaths[key] = iPath;
+}
+}
+}
+} catch { }
+}
 }
