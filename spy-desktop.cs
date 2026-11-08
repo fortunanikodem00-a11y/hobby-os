@@ -238,7 +238,6 @@ public class Program
                 string iPath = iconPaths.ContainsKey(pos.Key) ? iconPaths[pos.Key] : "none";
                 ln.Add(pos.Key + "," + pos.Value.X + "," + pos.Value.Y + "," + iPath);
             }
-Używaj kodu z rozwagą.
 File.WriteAllLines(configPath, ln.ToArray());
 } catch { }
 }
