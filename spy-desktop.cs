@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -38,7 +39,7 @@ public class Program
         Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
         f.Controls.Add(topBar);
 
-        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // INTERFEJS GRAFICZNY", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(350, 20) };
+        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // ZAAWANSOWANY PULPIT", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(350, 20) };
         topBar.Controls.Add(lblLogo);
 
         Button btnMagazyn = new Button { Text = "🏪 MAGAZYN APLIKACJI (.CS)", Location = new Point(850, 6), Size = new Size(250, 28), BackColor = Color.FromArgb(40, 45, 55), ForeColor = Color.Cyan, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8, FontStyle.Bold) };
@@ -140,11 +141,10 @@ public class Program
                 }
             };
 
-            // Wybór ikony do operacji z menu kontekstowego
             pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
             lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
 
-            // Podwójne kliknięcie uruchamia poprawnie apkę
+            // Podwójne kliknięcie autentycznie uruchamia program
             pic.DoubleClick += (s, e) => OtworzAplikacjeSkryptu(nazwaApki);
             lbl.DoubleClick += (s, e) => OtworzAplikacjeSkryptu(nazwaApki);
 
@@ -152,12 +152,44 @@ public class Program
         }
     }
 
+    // INTERFEJS REALNEGO URUCHAMIANIA KODU .CS PRZEZ PROCES DOTNET RUN
     private static void OtworzAplikacjeSkryptu(string plik)
     {
-        Form appForm = new Form { Text = "Uruchomiono kod: " + plik, Size = new Size(500, 300), StartPosition = FormStartPosition.CenterScreen, BackColor = Color.FromArgb(20,20,25) };
-        Label info = new Label { Text = "Pomyślnie wywołano i zinterpretowano plik " + plik + " przez SDK!", ForeColor = Color.White, Location = new Point(30, 50), Size = new Size(400, 30), Font = new Font("Segoe UI", 10) };
-        appForm.Controls.Add(info);
-        appForm.ShowDialog();
+        string folderSrc = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "src_repo");
+        string sciezkaPlikuCs = Path.Combine(folderSrc, plik);
+
+        // Jeśli plik fizycznie nie istnieje (bo usunąłeś lub to nowo dodana ikona), utwórz dla niego domyślny kod okienka
+        if (!File.Exists(sciezkaPlikuCs))
+        {
+            string domyslnyKodOkna = "using System; using System.Windows.Forms; class Program { [STAThread] static void Main() { Application.EnableVisualStyles(); Form f = new Form { Text = \"Uruchomiono: " + plik + "\" }; f.ShowDialog(); } }";
+            File.WriteAllText(sciezkaPlikuCs, domyslnyKodOkna);
+        }
+
+        try
+        {
+            // Przygotowanie izolowanego środowiska projektowego .NET Core w locie
+            string tempDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HobbyOSRuntimeApp_" + plik.Replace(".", "_"));
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            Directory.CreateDirectory(tempDir);
+
+            string csprojContent = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>";
+            File.WriteAllText(Path.Combine(tempDir, "RuntimeApp.csproj"), csprojContent);
+            File.Copy(sciezkaPlikuCs, Path.Combine(tempDir, "Program.cs"), true);
+
+            // PRAWDZIWE URUCHOMIENIE PROCESU PROCESORA SDK .NET CORE KODU ŹRÓDŁOWEGO
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = "run --project " + "\"" + tempDir + "\"",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+            Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Błąd wewnętrzny SDK podczas kompilacji pliku .cs: " + ex.Message, "HobbyOS Kernel Error");
+        }
     }
 
     private static void OtworzWlasciwosciApki()
@@ -170,44 +202,41 @@ public class Program
             using (OpenFileDialog ofd = new OpenFileDialog()) {
                 ofd.Filter = "Obrazy|*.png;*.jpg";
                 if (ofd.ShowDialog() == DialogResult.OK) {
-                    iconPaths[selectedIcon] = ofd.FileName;
-                    ZapiszKonfiguracje();
-                    OdswiezGnomePulpit();
-                    propForm.Close();
-                }
-            }
-        };
-        propForm.Controls.Add(btnWgraj);
-        propForm.ShowDialog();
-    }
-
-    private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) OtworzAplikacjeSkryptu(selectedIcon); }
-    private static void UsunZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) { positions.Remove(selectedIcon); ZapiszKonfiguracje(); OdswiezGnomePulpit(); } }
-
-    private static void ZapiszKonfiguracje()
-    {
-        try {
-            List<string> ln = new List<string>();
-            foreach (KeyValuePair<string, Point> pos in positions) {
-                string iPath = iconPaths.ContainsKey(pos.Key) ? iconPaths[pos.Key] : "none";
-                ln.Add(pos.Key + "," + pos.Value.X + "," + pos.Value.Y + "," + iPath);
-            }
-            File.WriteAllLines(configPath, ln.ToArray());
-        } catch { }
-    }
-
-    private static void WczytajKonfiguracje()
-    {
-        try {
-            if (File.Exists(configPath)) {
-                string[] ln = File.ReadAllLines(configPath);
-                positions.Clear(); iconPaths.Clear();
-                foreach (string l in ln) {
-                    string[] tk = l.Split(',');
-                    if (tk.Length == 4) {
-                        positions[tk[0]] = new Point(int.Parse(tk[1]), int.Parse(tk[2]));
-                        if (tk[3] != "none") iconPaths[tk[0]] = tk[3];
-
+Używaj kodu z rozwagą.
+iconPaths[selectedIcon] = ofd.FileName;
+ZapiszKonfiguracje();
+OdswiezGnomePulpit();
+propForm.Close();
+}
+}
+};
+propForm.Controls.Add(btnWgraj);
+propForm.ShowDialog();
+}
+private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) OtworzAplikacjeSkryptu(selectedIcon); }
+private static void UsunZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) { positions.Remove(selectedIcon); ZapiszKonfiguracje(); OdswiezGnomePulpit(); } }
+private static void ZapiszKonfiguracje()
+{
+try {
+List ln = new List();
+foreach (KeyValuePair<string, Point> pos in positions) {
+string iPath = iconPaths.ContainsKey(pos.Key) ? iconPaths[pos.Key] : "none";
+ln.Add(pos.Key + "," + pos.Value.X + "," + pos.Value.Y + "," + iPath);
+}
+File.WriteAllLines(configPath, ln.ToArray());
+} catch { }
+}
+private static void WczytajKonfiguracje()
+{
+try {
+if (File.Exists(configPath)) {
+string[] ln = File.ReadAllLines(configPath);
+positions.Clear(); iconPaths.Clear();
+foreach (string l in ln) {
+string[] tk = l.Split(',');
+if (tk.Length == 4) {
+positions[tk] = new Point(int.Parse(tk), int.Parse(tk));
+if (tk != "none") iconPaths[tk] = tk;
 }
 }
 }
