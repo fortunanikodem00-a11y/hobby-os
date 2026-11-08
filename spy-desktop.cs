@@ -41,15 +41,28 @@ public class Program
             foreach (Control c in pnlPulpit.Controls) if (c.Tag != null && positions.ContainsKey(c.Tag.ToString())) c.Top = positions[c.Tag.ToString()].Y + obecnyScrollY;
         };
 
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string folderRepo = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\src_repo"));
+        // ⚡ AUTOMATYCZNE, BEZBŁĘDNE SZUKANIE FOLDERU SRC_REPO OD KATALOGU PROJEKTU UŻYTKOWNIKA
+        string folderRepo = "";
+        string uzytkownikPath = Path.Combine("C:\\Users", Environment.UserName, "source\\repos");
         
-        if (!Directory.Exists(folderRepo)) 
+        if (Directory.Exists(uzytkownikPath))
         {
-            folderRepo = Path.Combine(baseDir, "src_repo");
-            if (!Directory.Exists(folderRepo)) Directory.CreateDirectory(folderRepo);
+            string[] szukanie = Directory.GetDirectories(uzytkownikPath, "src_repo", SearchOption.AllDirectories);
+            if (szukanie.Length > 0)
+            {
+                folderRepo = szukanie[0];
+            }
         }
 
+        // Zabezpieczenie ratunkowe, jeśli folder nie został znaleziony wyżej
+        if (string.IsNullOrEmpty(folderRepo) || !Directory.Exists(folderRepo))
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            folderRepo = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\src_repo"));
+            if (!Directory.Exists(folderRepo)) folderRepo = Path.Combine(baseDir, "src_repo");
+        }
+
+        if (!Directory.Exists(folderRepo)) Directory.CreateDirectory(folderRepo);
         string[] pliki = Directory.GetFiles(folderRepo, "*.cs");
 
         if (pliki.Length == 0) pnlPulpit.Controls.Add(new Label { Text = "📂 [ Repozytorium src_repo puste ]\nWgraj skrypty .cs, aby automatycznie wyrenderować ikony.", ForeColor = Color.FromArgb(100, 110, 120), Font = new Font("Consolas", 10, FontStyle.Italic), Location = new Point(50, 50), Size = new Size(600, 50) });
@@ -70,23 +83,19 @@ public class Program
             pic.MouseEnter += (s, e) => { selectedIcon = nazwa; pnl.BackColor = Color.FromArgb(34, 36, 44); };
             pic.MouseLeave += (s, e) => pnl.BackColor = Color.FromArgb(24, 25, 30);
 
-            pic.DoubleClick += (s, e) => OdpalProcesSystemowy(nazwa);
-            lbl.DoubleClick += (s, e) => OdpalProcesSystemowy(nazwa);
+            pic.DoubleClick += (s, e) => OdpalProcesSystemowy(folderRepo, nazwa);
+            lbl.DoubleClick += (s, e) => OdpalProcesSystemowy(folderRepo, nazwa);
         }
 
         Application.Run(f);
     }
 
-    private static void OdpalProcesSystemowy(string nazwaSkryptu)
+    private static void OdpalProcesSystemowy(string sciezkaRepo, string nazwaSkryptu)
     {
         if (string.IsNullOrEmpty(nazwaSkryptu)) return;
         try
         {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string folderRepo = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\src_repo"));
-            if (!Directory.Exists(folderRepo)) folderRepo = Path.Combine(baseDir, "src_repo");
-            
-            string pelnaSciezka = Path.Combine(folderRepo, nazwaSkryptu);
+            string pelnaSciezka = Path.Combine(sciezkaRepo, nazwaSkryptu);
 
             if (File.Exists(pelnaSciezka))
             {
