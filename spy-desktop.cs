@@ -146,17 +146,14 @@ public class Program
                 Type t = assembly.GetType("HobbyOSFullBootKernel");
                 if (t != null)
                 {
-                    // Dynamicznie wyciągamy listę skryptów z jądra, aby wiedzieć, który numer ma nasza apka
                     foreach (Form openForm in Application.OpenForms)
                     {
                         if (openForm.GetType() == t)
                         {
-                            // Pobieramy fizyczną ścieżkę do folderu src_repo z jądra
                             var fieldFolder = t.GetField("folderSrc", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                             if (fieldFolder == null) return;
                             string fSrc = (string)fieldFolder.GetValue(openForm)!;
 
-                            // Pobieramy listę plików dokładnie tak, jak robi to jądro przy pulpit-start
                             string[] pliki = Directory.GetFiles(fSrc, "*.cs");
                             int indeksApki = -1;
                             for (int i = 0; i < pliki.Length; i++)
@@ -168,29 +165,40 @@ public class Program
                                 }
                             }
 
-                            if (indeksApki == -1) return; // Jeśli pliku nie ma, przerywamy
+                            if (indeksApki == -1) return;
 
-                            // Odnajdujemy TextBox wejściowy jądra
                             var fields = t.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
                             foreach (var field in fields)
                             {
                                 if (field.FieldType == typeof(TextBox))
                                 {
                                     TextBox txtInput = (TextBox)field.GetValue(openForm)!;
-                                    txtInput.Invoke(new Action(() => {
-                                        // 1. Wpisujemy i odpalamy menu bootowania jądra
-                                        txtInput.Text = "pulpit-start"; 
+                                    
+                                    // Uruchamiamy asynchroniczne odliczanie w tle, aby nie zamrozić interfejsu
+                                    Task.Run(async () => {
+                                        openForm.Invoke(new Action(() => {
+                                            txtInput.Focus();
+                                            txtInput.Text = "pulpit-start";
+                                        }));
+                                        
+                                        // Czekamy chwilę na wpisanie tekstu i wysyłamy ENTER
+                                        await Task.Delay(50);
                                         SendKeys.SendWait("{ENTER}");
                                         
-                                        // 2. Klikamy strzałkę w dół dokładnie tyle razy, aby najechać na naszą apkę
+                                        // 🧠 KLUCZOWE OPÓŹNIENIE: Dajemy jądru czas na wyrenderowanie menu wyboru
+                                        await Task.Delay(150);
+
+                                        // Przeklikujemy strzałki w dół z krótkimi przerwami
                                         for (int d = 0; d < indeksApki; d++)
                                         {
                                             SendKeys.SendWait("{DOWN}");
+                                            await Task.Delay(50);
                                         }
 
-                                        // 3. Zatwierdzamy ostateczny rozruch procesu w jądre
+                                        // Ostateczne zatwierdzenie wybranego sektora
+                                        await Task.Delay(50);
                                         SendKeys.SendWait("{ENTER}");
-                                    }));
+                                    });
                                     return;
                                 }
                             }
