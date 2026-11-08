@@ -8,7 +8,6 @@ public class Program
 {
     private static Panel pnlPulpit = null!;
     private static ContextMenuStrip menuIkony = null!;
-    private static string configPath = "spy_desktop_positions.cfg";
     private static Dictionary<string, Point> positions = new Dictionary<string, Point>();
     private static bool isDragging = false;
     private static Point startMousePos;
@@ -42,9 +41,17 @@ public class Program
             foreach (Control c in pnlPulpit.Controls) if (c.Tag != null && positions.ContainsKey(c.Tag.ToString())) c.Top = positions[c.Tag.ToString()].Y + obecnyScrollY;
         };
 
-        // SKANOWANIE DYSKU I BUDOWANIE IKON
-        string folderRepo = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "src_repo");
-        if (!Directory.Exists(folderRepo)) Directory.CreateDirectory(folderRepo);
+        // SPRAWDZONA ŚCIEŻKA: WYCHODZIMY Z FOLDERU TEMP DO PRAWDZIWEGO REPOZYTORIUM JĄDRA
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string folderRepo = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\src_repo"));
+        
+        if (!Directory.Exists(folderRepo)) 
+        {
+            // Zabezpieczenie dla bezpośredniego uruchomienia w głównym binarce
+            folderRepo = Path.Combine(baseDir, "src_repo");
+            if (!Directory.Exists(folderRepo)) Directory.CreateDirectory(folderRepo);
+        }
+
         string[] pliki = Directory.GetFiles(folderRepo, "*.cs");
 
         if (pliki.Length == 0) pnlPulpit.Controls.Add(new Label { Text = "📂 [ Repozytorium src_repo puste ]\nWgraj skrypty .cs, aby automatycznie wyrenderować ikony.", ForeColor = Color.FromArgb(100, 110, 120), Font = new Font("Consolas", 10, FontStyle.Italic), Location = new Point(50, 50), Size = new Size(600, 50) });
@@ -72,13 +79,15 @@ public class Program
         Application.Run(f);
     }
 
-    // ⚡ NAJKRÓTSZE I NAJLEPSZE BEZPOŚREDNIE ODPALANIE PLIKU BEZ TERMINALA
     private static void OdpalProcesSystemowy(string nazwaSkryptu)
     {
         if (string.IsNullOrEmpty(nazwaSkryptu)) return;
         try
         {
-            string folderRepo = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "src_repo");
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string folderRepo = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\src_repo"));
+            if (!Directory.Exists(folderRepo)) folderRepo = Path.Combine(baseDir, "src_repo");
+            
             string pelnaSciezka = Path.Combine(folderRepo, nazwaSkryptu);
 
             if (File.Exists(pelnaSciezka))
@@ -87,7 +96,7 @@ public class Program
                 psi.FileName = "dotnet";
                 psi.Arguments = "run -- " + "\"" + pelnaSciezka + "\"";
                 psi.CreateNoWindow = false;
-                psi.UseShellExecute = true; // Otwiera jako całkowicie niezależne, nowe okno w Windows
+                psi.UseShellExecute = true;
 
                 System.Diagnostics.Process.Start(psi);
             }
