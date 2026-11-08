@@ -7,6 +7,7 @@ using System.Windows.Forms;
 public class Program
 {
     private static Panel pnlPulpit = null!;
+    private static Panel pnlGnomeDock = null!;
     private static ContextMenuStrip menuIkony = null!;
     
     private static string configPath = "spy_desktop_positions.cfg";
@@ -28,7 +29,7 @@ public class Program
         Form f = new Form();
         f.Text = "Spy-D OS // Gnome Tactical Desktop Suite";
         f.Size = new Size(1150, 780);
-        f.BackColor = Color.FromArgb(14, 16, 20);
+        f.BackColor = Color.FromArgb(10, 11, 14); // Głęboki grafit Gnome
         f.StartPosition = FormStartPosition.CenterScreen;
         f.FormBorderStyle = FormBorderStyle.FixedSingle;
         f.MaximizeBox = false;
@@ -36,19 +37,30 @@ public class Program
 
         WczytajKonfiguracje();
 
-        Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
+        // Górny panel Gnome Top Bar
+        Panel topBar = new Panel { Size = new Size(1150, 35), Location = new Point(0, 0), BackColor = Color.FromArgb(18, 18, 22) };
         f.Controls.Add(topBar);
 
-        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // LIVE FILE-SYSTEM ENGINE ACTIVE (Klawisze GÓRA/DÓŁ przewijają pulpit)", Font = new Font("Segoe UI", 9, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 12), Size = new Size(700, 20) };
+        Label lblLogo = new Label { Text = "🔒 GNOME SHELL CORE // ENTERPRISE ENVIRONMENT ACTIVE (Klawisze GÓRA/DÓŁ przewijają obszar roboczy)", Font = new Font("Ubuntu", 9, FontStyle.Bold), ForeColor = Color.FromArgb(240, 240, 240), Location = new Point(15, 10), Size = new Size(800, 20) };
         topBar.Controls.Add(lblLogo);
 
-        pnlPulpit = new Panel { Size = new Size(1150, 700), Location = new Point(0, 40), BackColor = Color.Transparent };
+        // GNOME VERTICAL DOCK (Pasek boczny w stylu Ubuntu)
+        pnlGnomeDock = new Panel { Size = new Size(70, 745), Location = new Point(0, 35), BackColor = Color.FromArgb(16, 17, 20) };
+        f.Controls.Add(pnlGnomeDock);
+
+        // Przycisk Menu w Docku
+        Button btnApps = new Button { Size = new Size(50, 50), Location = new Point(10, 20), BackColor = Color.FromArgb(35, 38, 45), FlatStyle = FlatStyle.Flat, Text = "⣿", Font = new Font("Segoe UI", 16), ForeColor = Color.Orange };
+        btnApps.FlatAppearance.BorderSize = 0;
+        pnlGnomeDock.Controls.Add(btnApps);
+
+        // Główny kontener na ruchomy pulpit (przesunięty w prawo za dock)
+        pnlPulpit = new Panel { Size = new Size(1080, 710), Location = new Point(70, 35), BackColor = Color.Transparent };
         f.Controls.Add(pnlPulpit);
 
         menuIkony = new ContextMenuStrip();
-        menuIkony.Items.Add("Uruchom", null, (s, e) => UruchomZaznaczonaApke());
-        menuIkony.Items.Add("Wlasciwosci", null, (s, e) => OtworzWlasciwosciApki());
+        menuIkony.Items.Add("Uruchom aplikację", null, (s, e) => UruchomZaznaczonaApke());
 
+        // Dynamiczny nasłuch przewijania pionowego pulpitu (Góra / Dół)
         f.KeyDown += (s, e) => {
             if (e.KeyCode == Keys.Down)
             {
@@ -82,17 +94,24 @@ public class Program
             Directory.CreateDirectory(folderRepo);
         }
 
-        string[] znalezionePliki = Directory.GetFiles(folderRepo, "*.cs");
+        List<string> listaPlikow = new List<string>(Directory.GetFiles(folderRepo, "*.cs"));
 
-        int startX = 50;
+        int startX = 40;
         int startY = 40;
-        int odstepX = 150;
-        int odstepY = 140;
-        int kolumnyNaEkran = 7;
+        int odstepX = 145;
+        int odstepY = 135;
+        int kolumnyNaEkran = 6;
 
-        for (int i = 0; i < znalezionePliki.Length; i++)
+        // JEŚLI REPOZYTORIUM JEST PUSTE, DODAJEMY WIZUALNĄ IKONĘ SYSTEMOWĄ
+        if (listaPlikow.Count == 0)
         {
-            string pelnaSciezka = znalezionePliki[i];
+            Label lblPuste = new Label { Text = "📂 [ System Repo Empty ]\nWrzuc pliki .cs do folderu src_repo, aby utworzyc ikony.", ForeColor = Color.FromArgb(100, 110, 120), Font = new Font("Consolas", 11, FontStyle.Italic), Location = new Point(50, 50), Size = new Size(500, 60) };
+            pnlPulpit.Controls.Add(lblPuste);
+        }
+
+        for (int i = 0; i < listaPlikow.Count; i++)
+        {
+            string pelnaSciezka = listaPlikow[i];
             string nazwaApki = Path.GetFileName(pelnaSciezka);
 
             if (!positions.ContainsKey(nazwaApki))
@@ -104,28 +123,24 @@ public class Program
 
             Point pozycja = positions[nazwaApki];
 
-            Panel pnlIkona = new Panel { Size = new Size(120, 110), Location = pozycja, BackColor = Color.FromArgb(30, 36, 45), BorderStyle = BorderStyle.FixedSingle, Tag = nazwaApki };
+            Panel pnlIkona = new Panel { Size = new Size(115, 105), Location = pozycja, BackColor = Color.FromArgb(24, 25, 30), BorderStyle = BorderStyle.None, Tag = nazwaApki };
             pnlIkona.ContextMenuStrip = menuIkony;
 
-            PictureBox pic = new PictureBox { Size = new Size(48, 48), Location = new Point(36, 15), BackColor = Color.FromArgb(45, 55, 70), SizeMode = PictureBoxSizeMode.StretchImage, Tag = nazwaApki };
-            if (iconPaths.ContainsKey(nazwaApki) && File.Exists(iconPaths[nazwaApki]))
-            {
-                try { pic.Image = Image.FromFile(iconPaths[nazwaApki]); } catch { }
-            }
+            // Zaokrąglony akcent stylistyczny Gnome wokół ikony
+            Panel pnlGrafika = new Panel { Size = new Size(46, 46), Location = new Point(34, 15), BackColor = Color.FromArgb(40, 42, 50) };
+            pnlIkona.Controls.Add(pnlGrafika);
 
-            Label lbl = new Label { Text = nazwaApki, ForeColor = Color.LightGreen, Location = new Point(5, 70), Size = new Size(110, 35), Tag = nazwaApki, TextAlign = ContentAlignment.TopCenter, Font = new Font("Consolas", 8, FontStyle.Bold) };
-
-            pnlIkona.Controls.Add(pic);
+            Label lbl = new Label { Text = nazwaApki, ForeColor = Color.FromArgb(220, 220, 220), Location = new Point(2, 68), Size = new Size(111, 32), Tag = nazwaApki, TextAlign = ContentAlignment.TopCenter, Font = new Font("Segoe UI", 8, FontStyle.Regular) };
             pnlIkona.Controls.Add(lbl);
 
-            pic.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { isDragging = true; startMousePos = e.Location; selectedIcon = nazwaApki; } };
-            pic.MouseMove += (s, e) => {
+            pnlGrafika.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { isDragging = true; startMousePos = e.Location; selectedIcon = nazwaApki; } };
+            pnlGrafika.MouseMove += (s, e) => {
                 if (isDragging && selectedIcon == nazwaApki) {
                     pnlIkona.Left += e.X - startMousePos.X;
                     pnlIkona.Top += e.Y - startMousePos.Y;
                 }
             };
-            pic.MouseUp += (s, e) => {
+            pnlGrafika.MouseUp += (s, e) => {
                 if (isDragging) {
                     isDragging = false;
                     positions[nazwaApki] = new Point(pnlIkona.Left, pnlIkona.Top - obecnyScrollY);
@@ -133,10 +148,11 @@ public class Program
                 }
             };
 
-            pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
-            lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
+            pnlGrafika.MouseEnter += (s, e) => { selectedIcon = nazwaApki; pnlIkona.BackColor = Color.FromArgb(34, 36, 44); };
+            pnlGrafika.MouseLeave += (s, e) => pnlIkona.BackColor = Color.FromArgb(24, 25, 30);
+            lbl.MouseEnter += (s, e) => { selectedIcon = nazwaApki; pnlIkona.BackColor = Color.FromArgb(34, 36, 44); };
 
-            pic.DoubleClick += (s, e) => EmulujKomendeWTerminalu(nazwaApki);
+            pnlGrafika.DoubleClick += (s, e) => EmulujKomendeWTerminalu(nazwaApki);
             lbl.DoubleClick += (s, e) => EmulujKomendeWTerminalu(nazwaApki);
 
             pnlPulpit.Controls.Add(pnlIkona);
@@ -195,27 +211,6 @@ public class Program
         catch { }
     }
 
-    private static void OtworzWlasciwosciApki()
-    {
-        if (string.IsNullOrEmpty(selectedIcon)) return;
-        Form propForm = new Form { Text = "Wlasciwosci: " + selectedIcon, Size = new Size(450, 300), StartPosition = FormStartPosition.CenterParent, BackColor = Color.FromArgb(30,30,35) };
-        Button btnWgraj = new Button { Text = "ZMIEŃ IKONĘ (PNG/JPG)", Location = new Point(20, 60), Size = new Size(380, 40), ForeColor = Color.Cyan, FlatStyle = FlatStyle.Flat };
-        
-        btnWgraj.Click += (s, e) => {
-            using (OpenFileDialog ofd = new OpenFileDialog()) {
-                ofd.Filter = "Obrazy|*.png;*.jpg";
-                if (ofd.ShowDialog() == DialogResult.OK) {
-                    iconPaths[selectedIcon] = ofd.FileName;
-                    ZapiszKonfiguracje();
-                    AnalizujDyskIBudujIkony();
-                    propForm.Close();
-                }
-            }
-        };
-        propForm.Controls.Add(btnWgraj);
-        propForm.ShowDialog();
-    }
-
     private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) EmulujKomendeWTerminalu(selectedIcon); }
 
     private static void ZapiszKonfiguracje()
@@ -230,7 +225,7 @@ public class Program
         } catch { }
     }
 
-       private static void WczytajKonfiguracje()
+    private static void WczytajKonfiguracje()
     {
         try {
             if (File.Exists(configPath)) {
@@ -240,14 +235,15 @@ public class Program
                     string[] tk = l.Split(',');
                     if (tk.Length == 4) {
                         string key = tk.GetValue(0).ToString();
-                        int x = int.Parse(tk.GetValue(1).ToString());
-                        int y = int.Parse(tk.GetValue(2).ToString());
-                        string iPath = tk.GetValue(3).ToString();
-                        positions[key] = new Point(x, y);
-                        if (iPath != "none") iconPaths[key] = iPath;
-                    }
-                }
-            }
-        } catch { }
-    }
-
+Używaj kodu z rozwagą.
+int x = int.Parse(tk.GetValue(1).ToString());
+int y = int.Parse(tk.GetValue(2).ToString());
+string iPath = tk.GetValue(3).ToString();
+positions[key] = new Point(x, y);
+if (iPath != "none") iconPaths[key] = iPath;
+}
+}
+}
+} catch { }
+}
+}
