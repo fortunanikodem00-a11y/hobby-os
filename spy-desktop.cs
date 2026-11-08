@@ -37,7 +37,7 @@ public class Program
         Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
         f.Controls.Add(topBar);
 
-        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // INTERFEJS GRAFICZNY APLIKACJI", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(450, 20) };
+        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // INTERACTIVE POWERSHELL REDIRECT", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(450, 20) };
         topBar.Controls.Add(lblLogo);
 
         Button btnMagazyn = new Button { Text = "APLIKACJE", Location = new Point(850, 6), Size = new Size(250, 28), BackColor = Color.FromArgb(40, 45, 55), ForeColor = Color.Cyan, FlatStyle = FlatStyle.Flat };
@@ -73,7 +73,7 @@ public class Program
         }
 
         OdswiezGnomePulpit();
-        f.ShowDialog();
+        Application.Run(f);
     }
 
     private static void StworzElementMagazynu(string nazwa, int y, Color k)
@@ -107,7 +107,7 @@ public class Program
                 try { pic.Image = Image.FromFile(iconPaths[nazwaApki]); } catch { }
             }
 
-            Label lbl = new Label { Text = nazwaApki, ForeColor = Color.LightGreen, Location = new Point(5, 70), Size = new Size(110, 35), Tag = nazwaApki, TextAlign = ContentAlignment.TopCenter };
+            Label lbl = new Label { Text = nazwaApki, ForeColor = Color.LightGreen, Location = new Point(5, 70), Size = new Size(110, 35), Tag = nazwaApki, TextAlign = ContentAlignment.TopCenter, Font = new Font("Consolas", 8, FontStyle.Bold) };
 
             pnlIkona.Controls.Add(pic);
             pnlIkona.Controls.Add(lbl);
@@ -130,39 +130,36 @@ public class Program
             pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
             lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
 
-            pic.DoubleClick += (s, e) => WywolajKomendeWTerminalu(nazwaApki);
-            lbl.DoubleClick += (s, e) => WywolajKomendeWTerminalu(nazwaApki);
+            pic.DoubleClick += (s, e) => PrzekazRozkazDoJadraTerminala(nazwaApki);
+            lbl.DoubleClick += (s, e) => PrzekazRozkazDoJadraTerminala(nazwaApki);
 
             pnlPulpit.Controls.Add(pnlIkona);
         }
     }
 
-    private static void WywolajKomendeWTerminalu(string nazwaSkryptu)
+    private static void PrzekazRozkazDoJadraTerminala(string nazwaSkryptu)
     {
         try
         {
-            // Dynamiczne wyszukanie Twojego głównego jądra w pamięci RAM bez twardych referencji tekstowych
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                Type t = asm.GetType("HobbyOSFullBootKernel");
+                Type t = assembly.GetType("HobbyOSFullBootKernel");
                 if (t != null)
                 {
-                    // Szukamy pola tekstowego komend lub metody bezpośrednio w Twoim kodzie jądra
                     var fields = t.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-                    foreach (var f in fields)
+                    foreach (var field in fields)
                     {
-                        if (f.FieldType == typeof(TextBox))
+                        if (field.FieldType == typeof(TextBox))
                         {
                             foreach (Form openForm in Application.OpenForms)
                             {
                                 if (openForm.GetType() == t)
                                 {
-                                    TextBox txtInput = (TextBox)f.GetValue(openForm)!;
+                                    TextBox txtInput = (TextBox)field.GetValue(openForm)!;
                                     txtInput.Invoke(new Action(() => {
-                                        // Pulpit fizycznie WPISUJE ukrytą komendę i emuluje wciśnięcie klawisza Enter w Twojej konsoli!
                                         txtInput.Text = "gem install";
                                         SendKeys.SendWait("{ENTER}");
-                                        txtInput.Text = "fetch " + nazwaSkryptu; // Przykład przekazania parametru do Twojego jądra
+                                        txtInput.Text = "pulpit-start"; // Lub dowolne inne bezpośrednie polecenie wywołania
                                         SendKeys.SendWait("{ENTER}");
                                     }));
                                     return;
@@ -197,7 +194,7 @@ public class Program
         propForm.ShowDialog();
     }
 
-    private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) WywolajKomendeWTerminalu(selectedIcon); }
+    private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) PrzekazRozkazDoJadraTerminala(selectedIcon); }
     private static void UsunZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) { positions.Remove(selectedIcon); ZapiszKonfiguracje(); OdswiezGnomePulpit(); } }
 
     private static void ZapiszKonfiguracje()
@@ -218,12 +215,11 @@ public class Program
             if (File.Exists(configPath)) {
                 string[] ln = File.ReadAllLines(configPath);
                 positions.Clear(); iconPaths.Clear();
-Używaj kodu z rozwagą.
-foreach (string l in ln) {
-string[] tk = l.Split(',');
-if (tk.Length == 4) {
-positions[tk] = new Point(int.Parse(tk), int.Parse(tk));
-if (tk != "none") iconPaths[tk] = tk;
+                foreach (string l in ln) {
+                    string[] tk = l.Split(',');
+                    if (tk.Length == 4) {
+                        positions[tk] = new Point(int.Parse(tk), int.Parse(tk));
+                        if (tk != "none") iconPaths[tk] = tk;
 }
 }
 }
