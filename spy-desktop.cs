@@ -216,10 +216,10 @@ public class Program
                 foreach (string l in ln) {
                     string[] tk = l.Split(',');
                     if (tk.Length == 4) {
-                        string key = tk[0];
-                        int x = int.Parse(tk[1]);
-                        int y = int.Parse(tk[2]);
-                        string iPath = tk[3];
+                        string key = tk.GetValue(0).ToString();
+                        int x = int.Parse(tk.GetValue(1).ToString());
+                        int y = int.Parse(tk.GetValue(2).ToString());
+                        string iPath = tk.GetValue(3).ToString();
                         
                         positions[key] = new Point(x, y);
                         if (iPath != "none") iconPaths[key] = iPath;
