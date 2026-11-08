@@ -26,7 +26,7 @@ public class Program
         Application.EnableVisualStyles();
         
         Form f = new Form();
-        f.Text = "Spy-D OS // Gnome Tactical Desktop Environment";
+        f.Text = "Spy-D OS // Gnome Advanced Tactical Suite v15.0";
         f.Size = new Size(1150, 780);
         f.BackColor = Color.FromArgb(14, 16, 20);
         f.StartPosition = FormStartPosition.CenterScreen;
@@ -39,7 +39,7 @@ public class Program
         Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
         f.Controls.Add(topBar);
 
-        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // ZAAWANSOWANY PULPIT", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(350, 20) };
+        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // WYKONALNY SILNIK PROCESOWY", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(450, 20) };
         topBar.Controls.Add(lblLogo);
 
         Button btnMagazyn = new Button { Text = "🏪 MAGAZYN APLIKACJI (.CS)", Location = new Point(850, 6), Size = new Size(250, 28), BackColor = Color.FromArgb(40, 45, 55), ForeColor = Color.Cyan, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8, FontStyle.Bold) };
@@ -53,7 +53,7 @@ public class Program
 
         // 3. MENU POD PRAWYM PRZYCISKIEM (PULPIT)
         menuPulpitu = new ContextMenuStrip();
-        menuPulpitu.Items.Add("Nowy skrypt apka.cs", null, (s, e) => {
+        menuPulpitu.Items.Add("Nowa aplikacja .cs", null, (s, e) => {
             string nowaApka = "apka_" + (positions.Count + 1) + ".cs";
             positions[nowaApka] = new Point(150, 150);
             ZapiszKonfiguracje();
@@ -81,7 +81,6 @@ public class Program
         if (positions.Count == 0)
         {
             positions["pobieracz.cs"] = new Point(60, 60);
-            positions["pulpit_mac.cs"] = new Point(60, 200);
         }
 
         OdswiezGnomePulpit();
@@ -111,10 +110,10 @@ public class Program
             string nazwaApki = element.Key;
             Point pozycja = element.Value;
 
-            Panel pnlIkona = new Panel { Size = new Size(120, 110), Location = pozycja, BackColor = Color.FromArgb(30, 36, 30), BorderStyle = BorderStyle.FixedSingle, Tag = nazwaApki };
+            Panel pnlIkona = new Panel { Size = new Size(120, 110), Location = pozycja, BackColor = Color.FromArgb(30, 36, 45), BorderStyle = BorderStyle.FixedSingle, Tag = nazwaApki };
             pnlIkona.ContextMenuStrip = menuIkony;
 
-            PictureBox pic = new PictureBox { Size = new Size(48, 48), Location = new Point(36, 15), BackColor = Color.FromArgb(50, 70, 50), SizeMode = PictureBoxSizeMode.StretchImage, Tag = nazwaApki };
+            PictureBox pic = new PictureBox { Size = new Size(48, 48), Location = new Point(36, 15), BackColor = Color.FromArgb(45, 55, 70), SizeMode = PictureBoxSizeMode.StretchImage, Tag = nazwaApki };
             if (iconPaths.ContainsKey(nazwaApki) && File.Exists(iconPaths[nazwaApki]))
             {
                 try { pic.Image = Image.FromFile(iconPaths[nazwaApki]); } catch { }
@@ -125,7 +124,7 @@ public class Program
             pnlIkona.Controls.Add(pic);
             pnlIkona.Controls.Add(lbl);
 
-            // MYSZKA: PRZENOSZENIE (DRAG AND DROP)
+            // DETEKCJA MYSZY I PRZECIĄGANIE
             pic.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { isDragging = true; startMousePos = e.Location; selectedIcon = nazwaApki; } };
             pic.MouseMove += (s, e) => {
                 if (isDragging && selectedIcon == nazwaApki) {
@@ -144,43 +143,46 @@ public class Program
             pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
             lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
 
-            // Podwójne kliknięcie autentycznie uruchamia program
-            pic.DoubleClick += (s, e) => OtworzAplikacjeSkryptu(nazwaApki);
-            lbl.DoubleClick += (s, e) => OtworzAplikacjeSkryptu(nazwaApki);
+            // AKTYWACJA DWUKROTNEGO KLIKNIĘCIA
+            pic.DoubleClick += (s, e) => KompilujAndRunRealApp(nazwaApki);
+            lbl.DoubleClick += (s, e) => KompilujAndRunRealApp(nazwaApki);
 
             pnlPulpit.Controls.Add(pnlIkona);
         }
     }
 
-    // INTERFEJS REALNEGO URUCHAMIANIA KODU .CS PRZEZ PROCES DOTNET RUN
-    private static void OtworzAplikacjeSkryptu(string plik)
+    // ⚡ PRAWDZIWY, ROZBUDOWANY INTERFEJS URUCHAMIANIA PROCESÓW PRZEZ DOTNET RUN SDK
+    private static void KompilujAndRunRealApp(string plik)
     {
-        string folderSrc = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "src_repo");
-        string sciezkaPlikuCs = Path.Combine(folderSrc, plik);
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string sciezkaPlikuCs = Path.Combine(baseDir, "src_repo", plik);
 
-        // Jeśli plik fizycznie nie istnieje (bo usunąłeś lub to nowo dodana ikona), utwórz dla niego domyślny kod okienka
+        // Jeśli plik nie istnieje (np. dodany z poziomu menu), system generuje dla niego natywne, czyste okno wejściowe C#
         if (!File.Exists(sciezkaPlikuCs))
         {
-            string domyslnyKodOkna = "using System; using System.Windows.Forms; class Program { [STAThread] static void Main() { Application.EnableVisualStyles(); Form f = new Form { Text = \"Uruchomiono: " + plik + "\" }; f.ShowDialog(); } }";
-            File.WriteAllText(sciezkaPlikuCs, domyslnyKodOkna);
+            string szablonKodu = "using System; using System.Windows.Forms; class Program { [STAThread] static void Main() { Application.EnableVisualStyles(); Form f = new Form { Text = \"HobbyOS Program: " + plik + "\", Size = new System.Drawing.Size(400,250) }; f.ShowDialog(); } }";
+            File.WriteAllText(sciezkaPlikuCs, szablonKodu);
         }
 
         try
         {
-            // Przygotowanie izolowanego środowiska projektowego .NET Core w locie
-            string tempDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HobbyOSRuntimeApp_" + plik.Replace(".", "_"));
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
-            Directory.CreateDirectory(tempDir);
+            // Tworzenie odizolowanego katalogu kompilacji dla aplikacji deweloperskiej
+            string tempProjectDir = Path.Combine(baseDir, "HobbyOS_SubProcess_" + plik.Replace(".", "_"));
+            if (Directory.Exists(tempProjectDir)) Directory.Delete(tempProjectDir, true);
+            Directory.CreateDirectory(tempProjectDir);
 
-            string csprojContent = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>";
-            File.WriteAllText(Path.Combine(tempDir, "RuntimeApp.csproj"), csprojContent);
-            File.Copy(sciezkaPlikuCs, Path.Combine(tempDir, "Program.cs"), true);
+            // Wygenerowanie rzeczywistego pliku struktury projektu .NET Core .csproj
+            string csproj = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>";
+            File.WriteAllText(Path.Combine(tempProjectDir, "SubApp.csproj"), csproj);
+            
+            // Fizyczne sklonowanie kodu źródłowego do struktury kompilatora
+            File.Copy(sciezkaPlikuCs, Path.Combine(tempProjectDir, "Program.cs"), true);
 
-            // PRAWDZIWE URUCHOMIENIE PROCESU PROCESORA SDK .NET CORE KODU ŹRÓDŁOWEGO
+            // URUCHOMIENIE AUTENTYCZNEGO PROCESU SYSTEMOWEGO PRZEZ SDK KOMPUTERA
             ProcessStartInfo psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = "run --project " + "\"" + tempDir + "\"",
+                Arguments = "run --project " + "\"" + tempProjectDir + "\"",
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
@@ -188,7 +190,7 @@ public class Program
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Błąd wewnętrzny SDK podczas kompilacji pliku .cs: " + ex.Message, "HobbyOS Kernel Error");
+            MessageBox.Show("Krytyczny błąd jądra SDK podczas kompilacji procesu: " + ex.Message, "HobbyOS Engine Exception");
         }
     }
 
@@ -200,9 +202,8 @@ public class Program
         
         btnWgraj.Click += (s, e) => {
             using (OpenFileDialog ofd = new OpenFileDialog()) {
-                ofd.Filter = "Obrazy|*.png;*.jpg";
-                if (ofd.ShowDialog() == DialogResult.OK) {
-Używaj kodu z rozwagą.
+ofd.Filter = "Obrazy|.png;.jpg";
+if (ofd.ShowDialog() == DialogResult.OK) {
 iconPaths[selectedIcon] = ofd.FileName;
 ZapiszKonfiguracje();
 OdswiezGnomePulpit();
@@ -213,7 +214,7 @@ propForm.Close();
 propForm.Controls.Add(btnWgraj);
 propForm.ShowDialog();
 }
-private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) OtworzAplikacjeSkryptu(selectedIcon); }
+private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) KompilujAndRunRealApp(selectedIcon); }
 private static void UsunZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) { positions.Remove(selectedIcon); ZapiszKonfiguracje(); OdswiezGnomePulpit(); } }
 private static void ZapiszKonfiguracje()
 {
