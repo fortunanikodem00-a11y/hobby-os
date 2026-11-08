@@ -14,8 +14,6 @@ public class Program
     private static string selectedIcon = "";
     private static int obecnyScrollY = 0;
     private static int krokScrolla = 80;
-    
-    // Pole statyczne, aby każda metoda miała bezproblemowy dostęp do ścieżki
     private static string folderRepo = "";
 
     [STAThread]
@@ -44,7 +42,6 @@ public class Program
             foreach (Control c in pnlPulpit.Controls) if (c.Tag != null && positions.ContainsKey(c.Tag.ToString())) c.Top = positions[c.Tag.ToString()].Y + obecnyScrollY;
         };
 
-        // Automatyczne szukanie folderu src_repo od katalogu projektów użytkownika
         string uzytkownikPath = Path.Combine("C:\\Users", Environment.UserName, "source\\repos");
         if (Directory.Exists(uzytkownikPath))
         {
@@ -55,7 +52,6 @@ public class Program
             }
         }
 
-        // Awaryjne zabezpieczenie ścieżki
         if (string.IsNullOrEmpty(folderRepo) || !Directory.Exists(folderRepo))
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -97,12 +93,23 @@ public class Program
         try
         {
             string pelnaSciezka = Path.Combine(folderRepo, nazwaSkryptu);
-
             if (File.Exists(pelnaSciezka))
             {
+                // Izolowany podfolder w Temp dla poprawnego zbudowania uruchamianego podprogramu
+                string nazwaBezRozszerzenia = Path.GetFileNameWithoutExtension(nazwaSkryptu);
+                string tempAppDir = Path.Combine(Path.GetTempPath(), "HobbyOSApps", "SubApp_" + nazwaBezRozszerzenia);
+                
+                if (Directory.Exists(tempAppDir)) Directory.Delete(tempAppDir, true);
+                Directory.CreateDirectory(tempAppDir);
+
+                // Budowanie czystego pliku projektu C# wymagany do otworzenia graficznego okna skryptu
+                string csprojContent = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>";
+                File.WriteAllText(Path.Combine(tempAppDir, "SubApp.csproj"), csprojContent);
+                File.Copy(pelnaSciezka, Path.Combine(tempAppDir, "Program.cs"), true);
+
                 System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo();
                 psi.FileName = "dotnet";
-                psi.Arguments = "run -- " + "\"" + pelnaSciezka + "\"";
+                psi.Arguments = "run --project " + "\"" + tempAppDir + "\"";
                 psi.CreateNoWindow = false;
                 psi.UseShellExecute = true;
 
