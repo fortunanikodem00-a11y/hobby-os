@@ -146,18 +146,49 @@ public class Program
                 Type t = assembly.GetType("HobbyOSFullBootKernel");
                 if (t != null)
                 {
-                    var fields = t.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-                    foreach (var field in fields)
+                    // Dynamicznie wyciągamy listę skryptów z jądra, aby wiedzieć, który numer ma nasza apka
+                    foreach (Form openForm in Application.OpenForms)
                     {
-                        if (field.FieldType == typeof(TextBox))
+                        if (openForm.GetType() == t)
                         {
-                            foreach (Form openForm in Application.OpenForms)
+                            // Pobieramy fizyczną ścieżkę do folderu src_repo z jądra
+                            var fieldFolder = t.GetField("folderSrc", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                            if (fieldFolder == null) return;
+                            string fSrc = (string)fieldFolder.GetValue(openForm)!;
+
+                            // Pobieramy listę plików dokładnie tak, jak robi to jądro przy pulpit-start
+                            string[] pliki = Directory.GetFiles(fSrc, "*.cs");
+                            int indeksApki = -1;
+                            for (int i = 0; i < pliki.Length; i++)
                             {
-                                if (openForm.GetType() == t)
+                                if (Path.GetFileName(pliki[i]) == nazwaSkryptu)
+                                {
+                                    indeksApki = i;
+                                    break;
+                                }
+                            }
+
+                            if (indeksApki == -1) return; // Jeśli pliku nie ma, przerywamy
+
+                            // Odnajdujemy TextBox wejściowy jądra
+                            var fields = t.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                            foreach (var field in fields)
+                            {
+                                if (field.FieldType == typeof(TextBox))
                                 {
                                     TextBox txtInput = (TextBox)field.GetValue(openForm)!;
                                     txtInput.Invoke(new Action(() => {
+                                        // 1. Wpisujemy i odpalamy menu bootowania jądra
                                         txtInput.Text = "pulpit-start"; 
+                                        SendKeys.SendWait("{ENTER}");
+                                        
+                                        // 2. Klikamy strzałkę w dół dokładnie tyle razy, aby najechać na naszą apkę
+                                        for (int d = 0; d < indeksApki; d++)
+                                        {
+                                            SendKeys.SendWait("{DOWN}");
+                                        }
+
+                                        // 3. Zatwierdzamy ostateczny rozruch procesu w jądre
                                         SendKeys.SendWait("{ENTER}");
                                     }));
                                     return;
@@ -170,6 +201,7 @@ public class Program
         }
         catch { }
     }
+
 
     private static void OtworzWlasciwosciApki()
     {
