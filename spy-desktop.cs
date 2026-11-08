@@ -5,7 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 
-public class Program
+public class SpyDesktopApplication
 {
     private static Panel pnlPulpit = null!;
     private static Panel pnlMagazyn = null!;
