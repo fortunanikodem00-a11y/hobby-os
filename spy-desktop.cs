@@ -14,6 +14,9 @@ public class Program
     private static string selectedIcon = "";
     private static int obecnyScrollY = 0;
     private static int krokScrolla = 80;
+    
+    // Pole statyczne, aby każda metoda miała bezproblemowy dostęp do ścieżki
+    private static string folderRepo = "";
 
     [STAThread]
     public static void Main()
@@ -41,10 +44,8 @@ public class Program
             foreach (Control c in pnlPulpit.Controls) if (c.Tag != null && positions.ContainsKey(c.Tag.ToString())) c.Top = positions[c.Tag.ToString()].Y + obecnyScrollY;
         };
 
-        // ⚡ AUTOMATYCZNE, BEZBŁĘDNE SZUKANIE FOLDERU SRC_REPO OD KATALOGU PROJEKTU UŻYTKOWNIKA
-        string folderRepo = "";
+        // Automatyczne szukanie folderu src_repo od katalogu projektów użytkownika
         string uzytkownikPath = Path.Combine("C:\\Users", Environment.UserName, "source\\repos");
-        
         if (Directory.Exists(uzytkownikPath))
         {
             string[] szukanie = Directory.GetDirectories(uzytkownikPath, "src_repo", SearchOption.AllDirectories);
@@ -54,7 +55,7 @@ public class Program
             }
         }
 
-        // Zabezpieczenie ratunkowe, jeśli folder nie został znaleziony wyżej
+        // Awaryjne zabezpieczenie ścieżki
         if (string.IsNullOrEmpty(folderRepo) || !Directory.Exists(folderRepo))
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -83,19 +84,19 @@ public class Program
             pic.MouseEnter += (s, e) => { selectedIcon = nazwa; pnl.BackColor = Color.FromArgb(34, 36, 44); };
             pic.MouseLeave += (s, e) => pnl.BackColor = Color.FromArgb(24, 25, 30);
 
-            pic.DoubleClick += (s, e) => OdpalProcesSystemowy(folderRepo, nazwa);
-            lbl.DoubleClick += (s, e) => OdpalProcesSystemowy(folderRepo, nazwa);
+            pic.DoubleClick += (s, e) => OdpalProcesSystemowy(nazwa);
+            lbl.DoubleClick += (s, e) => OdpalProcesSystemowy(nazwa);
         }
 
         Application.Run(f);
     }
 
-    private static void OdpalProcesSystemowy(string sciezkaRepo, string nazwaSkryptu)
+    private static void OdpalProcesSystemowy(string nazwaSkryptu)
     {
         if (string.IsNullOrEmpty(nazwaSkryptu)) return;
         try
         {
-            string pelnaSciezka = Path.Combine(sciezkaRepo, nazwaSkryptu);
+            string pelnaSciezka = Path.Combine(folderRepo, nazwaSkryptu);
 
             if (File.Exists(pelnaSciezka))
             {
