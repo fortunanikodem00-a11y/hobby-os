@@ -41,13 +41,11 @@ public class Program
             foreach (Control c in pnlPulpit.Controls) if (c.Tag != null && positions.ContainsKey(c.Tag.ToString())) c.Top = positions[c.Tag.ToString()].Y + obecnyScrollY;
         };
 
-        // SPRAWDZONA ŚCIEŻKA: WYCHODZIMY Z FOLDERU TEMP DO PRAWDZIWEGO REPOZYTORIUM JĄDRA
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
         string folderRepo = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\..\src_repo"));
         
         if (!Directory.Exists(folderRepo)) 
         {
-            // Zabezpieczenie dla bezpośredniego uruchomienia w głównym binarce
             folderRepo = Path.Combine(baseDir, "src_repo");
             if (!Directory.Exists(folderRepo)) Directory.CreateDirectory(folderRepo);
         }
