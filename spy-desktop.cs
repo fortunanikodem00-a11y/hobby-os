@@ -224,9 +224,7 @@ public class Program
                         positions[key] = new Point(x, y);
                         if (iPath != "none") iconPaths[key] = iPath;
                     }
-Używaj kodu z rozwagą.
-}
-}
-} catch { }
-}
-}
+                }
+            }
+        } catch { }
+    }
