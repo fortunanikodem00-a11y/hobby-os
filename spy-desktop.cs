@@ -29,7 +29,7 @@ public class Program
         Form f = new Form();
         f.Text = "Spy-D OS // Gnome Tactical Desktop Suite";
         f.Size = new Size(1150, 780);
-        f.BackColor = Color.FromArgb(11, 12, 15);
+        f.BackColor = Color.FromArgb(11, 12, 15); // Ciemny grafit Ubuntu/Gnome
         f.StartPosition = FormStartPosition.CenterScreen;
         f.FormBorderStyle = FormBorderStyle.FixedSingle;
         f.MaximizeBox = false;
@@ -218,6 +218,7 @@ public class Program
         } catch { }
     }
 
+    // PANCERNA METODA BEZ ŻADNYCH NAWIASÓW KWADRATOWYCH — CAŁKOWITA ODPORNOŚĆ NA UCIĘCIA
     private static void WczytajKonfiguracje()
     {
         try {
@@ -225,17 +226,25 @@ public class Program
                 string[] ln = File.ReadAllLines(configPath);
                 positions.Clear(); iconPaths.Clear();
                 foreach (string l in ln) {
-                    var elementy = new List<string>(l.Split(','));
-                    if (elementy.Count == 4) {
-                        string key = elementy[0];
-                        int x = int.Parse(elementy[1]);
-                        int y = int.Parse(elementy[2]);
-                        string iPath = elementy[3];
-                        positions[key] = new Point(x, y);
-                        if (iPath != "none") iconPaths[key] = iPath;
-                    }
-                }
-            }
-        } catch { }
-    }
+                    string s = l;
+                    int p1 = s.IndexOf(',');
+                    if (p1 == -1) continue;
+                    string key = s.Substring(0, p1);
+                    s = s.Substring(p1 + 1);
+
+                    int p2 = s.IndexOf(',');
+                    if (p2 == -1) continue;
+                    int x = int.Parse(s.Substring(0, p2));
+                    s = s.Substring(p2 + 1);
+
+                    int p3 = s.IndexOf(',');
+                    if (p3 == -1) continue;
+int y = int.Parse(s.Substring(0, p3));
+string iPath = s.Substring(p3 + 1);
+positions[key] = new Point(x, y);
+if (iPath != "none") iconPaths[key] = iPath;
+}
+}
+} catch { }
+}
 }
