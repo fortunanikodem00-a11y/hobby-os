@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
 using System.Windows.Forms;
 
 Application.EnableVisualStyles();
@@ -49,7 +50,7 @@ if (positions.Count == 0)
 Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
 f.Controls.Add(topBar);
 
-Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // REDIRECTION GRAPHICS ENGINE", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(450, 20) };
+Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // REFLECTION ENGINE ACTIVE", Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 10), Size = new Size(450, 20) };
 topBar.Controls.Add(lblLogo);
 
 Panel pnlMagazyn = new Panel { Size = new Size(320, 600), Location = new Point(800, 50), BackColor = Color.FromArgb(25, 28, 35), Visible = false, BorderStyle = BorderStyle.FixedSingle };
@@ -85,6 +86,35 @@ ContextMenuStrip menuIkony = new ContextMenuStrip();
 var itemRun = menuIkony.Items.Add("Uruchom");
 var itemProp = menuIkony.Items.Add("Wlasciwosci");
 var itemDel = menuIkony.Items.Add("Usun");
+
+// BEZPIECZNE DYNAMICZNE WYWOŁANIE METODY Z GŁÓWNEGO JĄDRA BEZ ODWOŁYWANIA SIĘ DO PROJEKTU
+Action<string> wywolajKomendeJadra = (nazwaSkryptu) => {
+    try
+    {
+        foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            Type t = asm.GetType("Hobby_OS.Form1");
+            if (t != null)
+            {
+                PropertyInfo prop = t.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
+                if (prop != null)
+                {
+                    object instance = prop.GetValue(null);
+                    if (instance != null)
+                    {
+                        MethodInfo method = t.GetMethod("WirtualneWpisanieKomendyZ_Pulpitu", BindingFlags.Public | BindingFlags.Instance);
+                        if (method != null)
+                        {
+                            method.Invoke(instance, new object[] { nazwaSkryptu });
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch { }
+};
 
 foreach (var element in positions)
 {
@@ -133,9 +163,8 @@ foreach (var element in positions)
     pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
     lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
 
-    // PRZEKIEROWANIE SYGNAŁU NA TWÓJ KOD TERMINALA (BEZ SZUKANIA FOLDERÓW DYSKOWYCH PRZEZ PODPROCES)
-    pic.DoubleClick += (s, e) => Hobby_OS.Form1.Instance.WirtualneWpisanieKomendyZ_Pulpitu(nazwaApki);
-    lbl.DoubleClick += (s, e) => Hobby_OS.Form1.Instance.WirtualneWpisanieKomendyZ_Pulpitu(nazwaApki);
+    pic.DoubleClick += (s, e) => wywolajKomendeJadra(nazwaApki);
+    lbl.DoubleClick += (s, e) => wywolajKomendeJadra(nazwaApki);
 
     pnlPulpit.Controls.Add(pnlIkona);
 }
@@ -151,7 +180,7 @@ pnlMagazyn.Controls.Add(btnInstaluj);
 
 itemRun.Click += (s, e) => {
     if (!string.IsNullOrEmpty(selectedIcon)) {
-        Hobby_OS.Form1.Instance.WirtualneWpisanieKomendyZ_Pulpitu(selectedIcon);
+        wywolajKomendeJadra(selectedIcon);
     }
 };
 
