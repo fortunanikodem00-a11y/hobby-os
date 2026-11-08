@@ -73,7 +73,7 @@ public class Program
         }
 
         OdswiezGnomePulpit();
-        f.ShowDialog();
+        Application.Run(f);
     }
 
     private static void StworzElementMagazynu(string nazwa, int y, Color k)
@@ -216,11 +216,17 @@ public class Program
                 foreach (string l in ln) {
                     string[] tk = l.Split(',');
                     if (tk.Length == 4) {
-                        positions[tk] = new Point(int.Parse(tk), int.Parse(tk));
-                        if (tk != "none") iconPaths[tk] = tk;
+                        string key = tk[0];
+                        int x = int.Parse(tk[1]);
+                        int y = int.Parse(tk[2]);
+                        string iPath = tk[3];
+                        
+                        positions[key] = new Point(x, y);
+                        if (iPath != "none") iconPaths[key] = iPath;
                     }
-                }
-            }
-        } catch { }
-    }
+Używaj kodu z rozwagą.
+}
+}
+} catch { }
+}
 }
