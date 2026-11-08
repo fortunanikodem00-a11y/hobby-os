@@ -218,7 +218,6 @@ public class Program
         } catch { }
     }
 
-    // ⚡ NOWATORSKI, BEZINDEKSOWY SYSTEM ODCZYTU KODU — BRAK ELEMENTÓW DO UCIĘCIA PRZEZ PARSER!
     private static void WczytajKonfiguracje()
     {
         try {
@@ -226,26 +225,17 @@ public class Program
                 string[] ln = File.ReadAllLines(configPath);
                 positions.Clear(); iconPaths.Clear();
                 foreach (string l in ln) {
-                    string[] elementy = l.Split(',');
-                    if (elementy.Length == 4) {
-                        string key = "";
-                        int x = 0;
-                        int y = 0;
-                        string iPath = "";
-
-                        int licznik = 0;
-                        foreach (string item in elementy) {
-                            if (licznik == 0) key = item;
-                            else if (licznik == 1) x = int.Parse(item);
-else if (licznik == 2) y = int.Parse(item);
-else if (licznik == 3) iPath = item;
-licznik++;
-}
-positions[key] = new Point(x, y);
-if (iPath != "none") iconPaths[key] = iPath;
-}
-}
-}
-} catch { }
-}
+                    var elementy = new List<string>(l.Split(','));
+                    if (elementy.Count == 4) {
+                        string key = elementy[0];
+                        int x = int.Parse(elementy[1]);
+                        int y = int.Parse(elementy[2]);
+                        string iPath = elementy[3];
+                        positions[key] = new Point(x, y);
+                        if (iPath != "none") iconPaths[key] = iPath;
+                    }
+                }
+            }
+        } catch { }
+    }
 }
