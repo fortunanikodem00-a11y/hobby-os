@@ -134,16 +134,20 @@ foreach (var element in positions)
     pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
     lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
 
-    // PRZEKIEROWANIE SYGNAŁU NA TWÓJ KOD Z ZAŁĄCZONEGO PLIKU (BEZ FUNKCJI REKURENCJI)
+    // POPRAWIONA ARCHITEKTURA ŚCIEŻEK - BEZBŁĘDNE COFANIE SIĘ DO PROJEKTU GŁÓWNEGO
     Action launchAction = () => {
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        // Wychodzimy z folderu tymczasowego kompilacji, aby trafić do prawdziwego src_repo
+        string mainBuildDir = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\.."));
+        string sciezkaZrodlowa = Path.Combine(mainBuildDir, "src_repo", nazwaApki);
+
         string tempProjectDir = Path.Combine(Path.GetTempPath(), "HobbyOSSub_" + nazwaApki.Replace(".", "_"));
         if (Directory.Exists(tempProjectDir)) Directory.Delete(tempProjectDir, true);
         Directory.CreateDirectory(tempProjectDir);
 
         string csproj = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>";
         File.WriteAllText(Path.Combine(tempProjectDir, "SubApp.csproj"), csproj);
-        File.Copy(Path.Combine(baseDir, "src_repo", nazwaApki), Path.Combine(tempProjectDir, "Program.cs"), true);
+        File.Copy(sciezkaZrodlowa, Path.Combine(tempProjectDir, "Program.cs"), true);
 
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = "dotnet", Arguments = "run --project " + "\"" + tempProjectDir + "\"", CreateNoWindow = true, UseShellExecute = false });
     };
@@ -166,15 +170,21 @@ pnlMagazyn.Controls.Add(btnInstaluj);
 itemRun.Click += (s, e) => {
     if (!string.IsNullOrEmpty(selectedIcon)) {
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string mainBuildDir = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\.."));
+        string sciezkaZrodlowa = Path.Combine(mainBuildDir, "src_repo", selectedIcon);
+
         string tempProjectDir = Path.Combine(Path.GetTempPath(), "HobbyOSSub_" + selectedIcon.Replace(".", "_"));
         if (Directory.Exists(tempProjectDir)) Directory.Delete(tempProjectDir, true);
         Directory.CreateDirectory(tempProjectDir);
+
         string csproj = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>";
         File.WriteAllText(Path.Combine(tempProjectDir, "SubApp.csproj"), csproj);
-        File.Copy(Path.Combine(baseDir, "src_repo", selectedIcon), Path.Combine(tempProjectDir, "Program.cs"), true);
+        File.Copy(sciezkaZrodlowa, Path.Combine(tempProjectDir, "Program.cs"), true);
+
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = "dotnet", Arguments = "run --project " + "\"" + tempProjectDir + "\"", CreateNoWindow = true, UseShellExecute = false });
     }
 };
+
 
 itemProp.Click += (s, e) => {
     if (!string.IsNullOrEmpty(selectedIcon)) {
