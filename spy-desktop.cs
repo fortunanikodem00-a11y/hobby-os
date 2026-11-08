@@ -43,6 +43,7 @@ if (File.Exists(configPath))
 if (positions.Count == 0)
 {
     positions["pobieracz.cs"] = new Point(60, 60);
+    positions["pulpit_mac.cs"] = new Point(60, 200);
 }
 
 Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
@@ -65,7 +66,6 @@ ContextMenuStrip menuPulpitu = new ContextMenuStrip();
 menuPulpitu.Items.Add("Nowa aplikacja .cs", null, (s, e) => {
     string nowaApka = "apka_" + (positions.Count + 1) + ".cs";
     positions[nowaApka] = new Point(150, 150);
-    
     try
     {
         List<string> ln = new List<string>();
@@ -77,7 +77,6 @@ menuPulpitu.Items.Add("Nowa aplikacja .cs", null, (s, e) => {
         File.WriteAllLines(configPath, ln.ToArray());
     }
     catch { }
-    
     Application.Restart();
 });
 pnlPulpit.ContextMenuStrip = menuPulpitu;
@@ -134,26 +133,9 @@ foreach (var element in positions)
     pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
     lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
 
-    // POPRAWIONA ARCHITEKTURA ŚCIEŻEK - BEZBŁĘDNE COFANIE SIĘ DO PROJEKTU GŁÓWNEGO
-    Action launchAction = () => {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        // Wychodzimy z folderu tymczasowego kompilacji, aby trafić do prawdziwego src_repo
-        string mainBuildDir = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\.."));
-        string sciezkaZrodlowa = Path.Combine(mainBuildDir, "src_repo", nazwaApki);
-
-        string tempProjectDir = Path.Combine(Path.GetTempPath(), "HobbyOSSub_" + nazwaApki.Replace(".", "_"));
-        if (Directory.Exists(tempProjectDir)) Directory.Delete(tempProjectDir, true);
-        Directory.CreateDirectory(tempProjectDir);
-
-        string csproj = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>";
-        File.WriteAllText(Path.Combine(tempProjectDir, "SubApp.csproj"), csproj);
-        File.Copy(sciezkaZrodlowa, Path.Combine(tempProjectDir, "Program.cs"), true);
-
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = "dotnet", Arguments = "run --project " + "\"" + tempProjectDir + "\"", CreateNoWindow = true, UseShellExecute = false });
-    };
-
-    pic.DoubleClick += (s, e) => launchAction();
-    lbl.DoubleClick += (s, e) => launchAction();
+    // PRZEKIEROWANIE SYGNAŁU NA TWÓJ KOD TERMINALA (BEZ SZUKANIA FOLDERÓW DYSKOWYCH PRZEZ PODPROCES)
+    pic.DoubleClick += (s, e) => Hobby_OS.Form1.Instance.WirtualneWpisanieKomendyZ_Pulpitu(nazwaApki);
+    lbl.DoubleClick += (s, e) => Hobby_OS.Form1.Instance.WirtualneWpisanieKomendyZ_Pulpitu(nazwaApki);
 
     pnlPulpit.Controls.Add(pnlIkona);
 }
@@ -169,22 +151,9 @@ pnlMagazyn.Controls.Add(btnInstaluj);
 
 itemRun.Click += (s, e) => {
     if (!string.IsNullOrEmpty(selectedIcon)) {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string mainBuildDir = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\.."));
-        string sciezkaZrodlowa = Path.Combine(mainBuildDir, "src_repo", selectedIcon);
-
-        string tempProjectDir = Path.Combine(Path.GetTempPath(), "HobbyOSSub_" + selectedIcon.Replace(".", "_"));
-        if (Directory.Exists(tempProjectDir)) Directory.Delete(tempProjectDir, true);
-        Directory.CreateDirectory(tempProjectDir);
-
-        string csproj = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms></PropertyGroup></Project>";
-        File.WriteAllText(Path.Combine(tempProjectDir, "SubApp.csproj"), csproj);
-        File.Copy(sciezkaZrodlowa, Path.Combine(tempProjectDir, "Program.cs"), true);
-
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = "dotnet", Arguments = "run --project " + "\"" + tempProjectDir + "\"", CreateNoWindow = true, UseShellExecute = false });
+        Hobby_OS.Form1.Instance.WirtualneWpisanieKomendyZ_Pulpitu(selectedIcon);
     }
 };
-
 
 itemProp.Click += (s, e) => {
     if (!string.IsNullOrEmpty(selectedIcon)) {
