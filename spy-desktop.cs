@@ -29,7 +29,7 @@ public class Program
         Form f = new Form();
         f.Text = "Spy-D OS // Gnome Tactical Desktop Suite";
         f.Size = new Size(1150, 780);
-        f.BackColor = Color.FromArgb(10, 11, 14); // Charakterystyczny grafit środowiska Gnome
+        f.BackColor = Color.FromArgb(11, 12, 15);
         f.StartPosition = FormStartPosition.CenterScreen;
         f.FormBorderStyle = FormBorderStyle.FixedSingle;
         f.MaximizeBox = false;
@@ -37,30 +37,25 @@ public class Program
 
         WczytajKonfiguracje();
 
-        // PANEL GÓRNY GNOME TOP BAR
         Panel topBar = new Panel { Size = new Size(1150, 35), Location = new Point(0, 0), BackColor = Color.FromArgb(18, 18, 22) };
         f.Controls.Add(topBar);
 
         Label lblLogo = new Label { Text = "🔒 GNOME SHELL CORE // LIVE FILE-SYSTEM ACTIVE (Klawisze GÓRA/DÓŁ przewijają pulpit pionowo)", Font = new Font("Ubuntu", 9, FontStyle.Bold), ForeColor = Color.FromArgb(240, 240, 240), Location = new Point(15, 10), Size = new Size(800, 20) };
         topBar.Controls.Add(lblLogo);
 
-        // PIONOWY UBUNTU DOCK PANEL (Pasek boczny)
         pnlGnomeDock = new Panel { Size = new Size(70, 745), Location = new Point(0, 35), BackColor = Color.FromArgb(16, 17, 20) };
         f.Controls.Add(pnlGnomeDock);
 
-        // Przycisk siatki aplikacji na dole docka
         Button btnApps = new Button { Size = new Size(50, 50), Location = new Point(10, 20), BackColor = Color.FromArgb(35, 38, 45), FlatStyle = FlatStyle.Flat, Text = "⣿", Font = new Font("Segoe UI", 16), ForeColor = Color.Orange };
         btnApps.FlatAppearance.BorderSize = 0;
         pnlGnomeDock.Controls.Add(btnApps);
 
-        // KONTENER PULPITU (Przesunięty w prawo za obszar bocznego docka)
         pnlPulpit = new Panel { Size = new Size(1080, 710), Location = new Point(70, 35), BackColor = Color.Transparent };
         f.Controls.Add(pnlPulpit);
 
         menuIkony = new ContextMenuStrip();
         menuIkony.Items.Add("Uruchom podprogram", null, (s, e) => UruchomZaznaczonaApke());
 
-        // OBSŁUGA STRZAŁEK KLADOŚCIOWYCH GÓRA/DÓŁ — PŁYNNE PRZEWIJANIE INTERFEJSU
         f.KeyDown += (s, e) => {
             if (e.KeyCode == Keys.Down)
             {
@@ -102,10 +97,9 @@ public class Program
         int odstepY = 135;
         int kolumnyNaEkran = 6;
 
-        // JEŚLI FOLDER SRC_REPO JEST USUNIĘTY/PUSTY — WYŚWIETLAMY TEKST INFORMACYJNY GNOME
         if (znalezionePliki.Length == 0)
         {
-            Label lblPuste = new Label { Text = "📂 [ Repozytorium src_repo puste ]\nWgraj dowolne skrypty .cs, aby automatycznie wyrenderować prawdziwe ikony.", ForeColor = Color.FromArgb(100, 110, 120), Font = new Font("Consolas", 10, FontStyle.Italic), Location = new Point(50, 50), Size = new Size(600, 50) };
+            Label lblPuste = new Label { Text = "📂 [ Repozytorium src_repo puste ]\nWgraj skrypty .cs, aby automatycznie wyrenderować ikony.", ForeColor = Color.FromArgb(100, 110, 120), Font = new Font("Consolas", 10, FontStyle.Italic), Location = new Point(50, 50), Size = new Size(600, 50) };
             pnlPulpit.Controls.Add(lblPuste);
         }
 
@@ -126,7 +120,6 @@ public class Program
             Panel pnlIkona = new Panel { Size = new Size(115, 105), Location = pozycja, BackColor = Color.FromArgb(24, 25, 30), BorderStyle = BorderStyle.None, Tag = nazwaApki };
             pnlIkona.ContextMenuStrip = menuIkony;
 
-            // Kwadratowy akcent pod grafikę w stylu ikon Ubuntu Gnome
             Panel pnlGrafika = new Panel { Size = new Size(46, 46), Location = new Point(34, 15), BackColor = Color.FromArgb(40, 42, 50) };
             pnlIkona.Controls.Add(pnlGrafika);
 
@@ -225,6 +218,7 @@ public class Program
         } catch { }
     }
 
+    // ⚡ NOWATORSKI, BEZINDEKSOWY SYSTEM ODCZYTU KODU — BRAK ELEMENTÓW DO UCIĘCIA PRZEZ PARSER!
     private static void WczytajKonfiguracje()
     {
         try {
@@ -232,13 +226,21 @@ public class Program
                 string[] ln = File.ReadAllLines(configPath);
                 positions.Clear(); iconPaths.Clear();
                 foreach (string l in ln) {
-                    string[] tk = l.Split(',');
-                    if (tk.Length == 4) {
-// Całkowicie bezindeksowy, bezpieczny system wyciągania wartości
-string key = Convert.ToString(tk.GetValue(0));
-int x = Convert.ToInt32(tk.GetValue(1));
-int y = Convert.ToInt32(tk.GetValue(2));
-string iPath = Convert.ToString(tk.GetValue(3));
+                    string[] elementy = l.Split(',');
+                    if (elementy.Length == 4) {
+                        string key = "";
+                        int x = 0;
+                        int y = 0;
+                        string iPath = "";
+
+                        int licznik = 0;
+                        foreach (string item in elementy) {
+                            if (licznik == 0) key = item;
+                            else if (licznik == 1) x = int.Parse(item);
+else if (licznik == 2) y = int.Parse(item);
+else if (licznik == 3) iPath = item;
+licznik++;
+}
 positions[key] = new Point(x, y);
 if (iPath != "none") iconPaths[key] = iPath;
 }
