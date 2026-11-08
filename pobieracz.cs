@@ -1,264 +1,109 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Net.Http;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
-public class Program
-{
-    private static Panel pnlPulpit = null!;
-    private static ContextMenuStrip menuIkony = null!;
+Application.EnableVisualStyles();
+
+// UTWORZENIE OKNA FILTRU SIECIOWEGO
+Form f = new Form();
+f.Text = "🛰️ NET-FETCH // HOBBYOS GLOBAL DOWNLOAD MANAGER [v3.0]";
+f.Size = new Size(700, 320);
+f.BackColor = Color.FromArgb(16, 16, 22);
+f.StartPosition = FormStartPosition.CenterScreen;
+f.FormBorderStyle = FormBorderStyle.FixedSingle;
+f.MaximizeBox = false;
+
+// ETYKIETA ADRESU URL
+Label lblUrl = new Label { Text = "WPROWADŹ LINK RAW GITHUBA LUB URL PLIKU .CS:", Location = new Point(25, 20), Size = new Size(630, 20), ForeColor = Color.Cyan, Font = new Font("Consolas", 9, FontStyle.Bold) };
+f.Controls.Add(lblUrl);
+
+// POLE TEKSTOWE NA LINK
+TextBox txtUrl = new TextBox { Location = new Point(25, 45), Size = new Size(635, 25), BackColor = Color.FromArgb(28, 28, 36), ForeColor = Color.Lime, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.FixedSingle };
+txtUrl.Text = "https://githubusercontent.com"; // Domyślny ułatwiający prefiks
+f.Controls.Add(txtUrl);
+
+// ETYKIETA STATUSU OPERACJI
+Label lblStatus = new Label { Text = "STATUS POWŁOKI: OCZEKIWANIE NA LINK SIECIOWY...", Location = new Point(25, 90), Size = new Size(630, 20), ForeColor = Color.DarkGray, Font = new Font("Consolas", 9) };
+f.Controls.Add(lblStatus);
+
+// PASEK POSTĘPU POBIERANIA
+ProgressBar pasekPostepu = new ProgressBar { Location = new Point(25, 120), Size = new Size(635, 25), Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 0, Visible = false };
+f.Controls.Add(pasekPostepu);
+
+// PRZYCISK INICJACJI TRANSFERU
+Button btnPobierz = new Button { Text = "ROZPOCZNIJ PRZEKIEROWANIE I POBIERANIE pliku", Location = new Point(25, 170), Size = new Size(635, 45), BackColor = Color.FromArgb(40, 40, 50), ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold), FlatStyle = FlatStyle.Flat };
+btnPobierz.FlatAppearance.BorderColor = Color.Lime;
+f.Controls.Add(btnPobierz);
+
+// REJESTRACJA AKCJI KLIKNIĘCIA — ASYNCHRONICZNY TRANSFER BEZ ZAMRAŻANIA OKNA
+btnPobierz.Click += async (s, e) => {
+    string url = txtUrl.Text.Trim();
     
-    private static string configPath = "spy_desktop_positions.cfg";
-    private static Dictionary<string, Point> positions = new Dictionary<string, Point>();
-    private static Dictionary<string, string> iconPaths = new Dictionary<string, string>();
-
-    private static bool isDragging = false;
-    private static Point startMousePos;
-    private static string selectedIcon = "";
-
-    // PARAMETRY PRZEWIJANIA PULPITU (SCROLL)
-    private static int obecnyScrollY = 0;
-    private static int krokScrolla = 80;
-
-    [STAThread]
-    public static void Main()
+    if (string.IsNullOrEmpty(url) || url.StartsWith("https://githubusercontent.com"))
     {
-        Application.EnableVisualStyles();
-        
-        Form f = new Form();
-        f.Text = "Spy-D OS // Gnome Tactical Desktop Suite";
-        f.Size = new Size(1150, 780);
-        f.BackColor = Color.FromArgb(14, 16, 20);
-        f.StartPosition = FormStartPosition.CenterScreen;
-        f.FormBorderStyle = FormBorderStyle.FixedSingle;
-        f.MaximizeBox = false;
-        f.KeyPreview = true; // Wymagane do przechwytywania strzałek klawiatury
-
-        WczytajKonfiguracje();
-
-        // Górny panel informacyjny
-        Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
-        f.Controls.Add(topBar);
-
-        Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // LIVE FILE-SYSTEM ENGINE ACTIVE (Klawisze GÓRA/DÓŁ przewijają pulpit)", Font = new Font("Segoe UI", 9, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 12), Size = new Size(700, 20) };
-        topBar.Controls.Add(lblLogo);
-
-        // Kontener główny pulpitu
-        pnlPulpit = new Panel { Size = new Size(1150, 700), Location = new Point(0, 40), BackColor = Color.Transparent };
-        f.Controls.Add(pnlPulpit);
-
-        menuIkony = new ContextMenuStrip();
-        menuIkony.Items.Add("Uruchom", null, (s, e) => UruchomZaznaczonaApke());
-        menuIkony.Items.Add("Wlasciwosci", null, (s, e) => OtworzWlasciwosciApki());
-
-        // OBSŁUGA PRZEWIJANIA PULPITU ZA POMOCĄ KLAWISZY GÓRA / DÓŁ
-        f.KeyDown += (s, e) => {
-            if (e.KeyCode == Keys.Down)
-            {
-                obecnyScrollY -= krokScrolla;
-                PrzesunZawartoscPulpitu();
-                e.Handled = true;
-            }
-            else if (e.KeyCode == Keys.Up)
-            {
-                if (obecnyScrollY < 0)
-                {
-                    obecnyScrollY += krokScrolla;
-                    PrzesunZawartoscPulpitu();
-                }
-                e.Handled = true;
-            }
-        };
-
-        // Analiza dysku i generowanie ikon
-        AnalizujDyskIBudujIkony();
-
-        Application.Run(f);
+        lblStatus.Text = " [BŁĄD]: Wklej prawidłowy, pełny link sieciowy pliku!";
+        lblStatus.ForeColor = Color.Red;
+        return;
     }
 
-    private static void AnalizujDyskIBudujIkony()
+    btnPobierz.Enabled = false;
+    txtUrl.ReadOnly = true;
+    pasekPostepu.Visible = true;
+    pasekPostepu.MarqueeAnimationSpeed = 30; // Włączenie animacji paska
+    lblStatus.Text = " [TRANSFER]: Nawiązywanie bezpiecznego gniazda SSL...";
+    lblStatus.ForeColor = Color.Yellow;
+
+    try
     {
-        pnlPulpit.Controls.Clear();
-
-        // Fizyczne skanowanie folderu src_repo w poszukiwaniu prawdziwych aplikacji
-        string folderRepo = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "src_repo");
-        if (!Directory.Exists(folderRepo))
+        using (HttpClient klient = new HttpClient())
         {
-            Directory.CreateDirectory(folderRepo);
-        }
+            klient.DefaultRequestHeaders.Add("User-Agent", "HobbyOS-FetchEngine");
+            
+            lblStatus.Text = " [TRANSFER]: Pobieranie surowych bajtów kodu z serwera...";
+            string czystyKodCs = await klient.GetStringAsync(url);
 
-        string[] znalezionePliki = Directory.GetFiles(folderRepo, "*.cs");
-
-        int startX = 50;
-        int startY = 40;
-        int odstepX = 150;
-        int odstepY = 140;
-        int kolumnyNaEkran = 7;
-
-        for (int i = 0; i < znalezionePliki.Length; i++)
-        {
-            string pelnaSciezka = znalezionePliki[i];
-            string nazwaApki = Path.GetFileName(pelnaSciezka);
-
-            // Wyliczanie automatycznej pozycji siatki, jeśli brak zapisanej w pliku cfg
-            if (!positions.ContainsKey(nazwaApki))
+            // Automatyczne wyciąganie nazwy pliku z adresu URL
+            string nazwaPliku = url.Substring(url.LastIndexOf('/') + 1);
+            if (string.IsNullOrEmpty(nazwaPliku) || !nazwaPliku.EndsWith(".cs"))
             {
-                int kolumna = i % kolumnyNaEkran;
-                int wiersz = i / kolumnyNaEkran;
-                positions[nazwaApki] = new Point(startX + (kolumna * odstepX), startY + (wiersz * odstepY));
+                nazwaPliku = "pobrana_aplikacja_" + DateTime.Now.Ticks + ".cs";
             }
 
-            Point pozycja = positions[nazwaApki];
-
-            // Budowanie wizualnego kontenera ikony
-            Panel pnlIkona = new Panel { Size = new Size(120, 110), Location = pozycja, BackColor = Color.FromArgb(30, 36, 45), BorderStyle = BorderStyle.FixedSingle, Tag = nazwaApki };
-            pnlIkona.ContextMenuStrip = menuIkony;
-
-            PictureBox pic = new PictureBox { Size = new Size(48, 48), Location = new Point(36, 15), BackColor = Color.FromArgb(45, 55, 70), SizeMode = PictureBoxSizeMode.StretchImage, Tag = nazwaApki };
-            if (iconPaths.ContainsKey(nazwaApki) && File.Exists(iconPaths[nazwaApki]))
+            // Ustalenie ścieżki zapisu wewnątrz folderu /src_repo jądra
+            string folderRepo = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "src_repo");
+            if (!Directory.Exists(folderRepo))
             {
-                try { pic.Image = Image.FromFile(iconPaths[nazwaApki]); } catch { }
+                Directory.CreateDirectory(folderRepo);
             }
 
-            Label lbl = new Label { Text = nazwaApki, ForeColor = Color.LightGreen, Location = new Point(5, 70), Size = new Size(110, 35), Tag = nazwaApki, TextAlign = ContentAlignment.TopCenter, Font = new Font("Consolas", 8, FontStyle.Bold) };
+            string ostatecznaSciezka = Path.Combine(folderRepo, nazwaPliku);
+            
+            // Zapis surowego skryptu C# na dysk twardy
+            File.WriteAllText(ostatecznaSciezka, czystyKodCs);
 
-            pnlIkona.Controls.Add(pic);
-            pnlIkona.Controls.Add(lbl);
-
-            // Obsługa przeciągania myszką
-            pic.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { isDragging = true; startMousePos = e.Location; selectedIcon = nazwaApki; } };
-            pic.MouseMove += (s, e) => {
-                if (isDragging && selectedIcon == nazwaApki) {
-                    pnlIkona.Left += e.X - startMousePos.X;
-                    pnlIkona.Top += e.Y - startMousePos.Y;
-                }
-            };
-            pic.MouseUp += (s, e) => {
-                if (isDragging) {
-                    isDragging = false;
-                    positions[nazwaApki] = new Point(pnlIkona.Left, pnlIkona.Top - obecnyScrollY);
-                    ZapiszKonfiguracje();
-                }
-            };
-
-            pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
-            lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
-
-            // Bezpośredni rozkaz wykonania komendy bezpśrednio w Twoim jądre
-            pic.DoubleClick += (s, e) => EmulujKomendeWTerminalu(nazwaApki);
-            lbl.DoubleClick += (s, e) => EmulujKomendeWTerminalu(nazwaApki);
-
-            pnlPulpit.Controls.Add(pnlIkona);
-        }
-
-        PrzesunZawartoscPulpitu();
-    }
-
-    private static void PrzesunZawartoscPulpitu()
-    {
-        // Przesuwa ikony w pionie w zależności od wykonanego scrolla klawiaturą
-        foreach (Control c in pnlPulpit.Controls)
-        {
-            if (c is Panel && c.Tag != null)
-            {
-                string nazwa = c.Tag.ToString()!;
-                if (positions.ContainsKey(nazwa))
-                {
-                    c.Top = positions[nazwa].Y + obecnyScrollY;
-                }
-            }
+            pasekPostepu.MarqueeAnimationSpeed = 0;
+            pasekPostepu.Style = ProgressBarStyle.Blocks;
+            pasekPostepu.Value = 100;
+            
+            lblStatus.Text = " [SUKCES]: Zapisano jako '" + nazwaPliku + "' w /src_repo! Odśwież pulpit.";
+            lblStatus.ForeColor = Color.Lime;
+            MessageBox.Show("Pobieranie zakończone sukcesem!\nSkrypt '" + nazwaPliku + "' jest gotowy do rozruchu.", "HobbyOS Security", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
-
-    private static void EmulujKomendeWTerminalu(string nazwaSkryptu)
+    catch (Exception ex)
     {
-        try
-        {
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                Type t = assembly.GetType("HobbyOSFullBootKernel");
-                if (t != null)
-                {
-                    var fields = t.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-                    foreach (var field in fields)
-                    {
-                        if (field.FieldType == typeof(TextBox))
-                        {
-                            foreach (Form openForm in Application.OpenForms)
-                            {
-                                if (openForm.GetType() == t)
-                                {
-                                    TextBox txtInput = (TextBox)field.GetValue(openForm)!;
-                                    txtInput.Invoke(new Action(() => {
-                                        txtInput.Focus();
-                                        // Wywołuje stworzoną przez Ciebie komendę bezpośredniego rozruchu z parametrem nazwy
-                                        txtInput.Text = "pulpit-start " + nazwaSkryptu; 
-                                        SendKeys.Send("{ENTER}");
-                                    }));
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
+        pasekPostepu.Visible = false;
+        lblStatus.Text = " [BŁĄD SIECI]: " + ex.Message;
+        lblStatus.ForeColor = Color.Red;
     }
-
-    private static void OtworzWlasciwosciApki()
+    finally
     {
-        if (string.IsNullOrEmpty(selectedIcon)) return;
-        Form propForm = new Form { Text = "Wlasciwosci: " + selectedIcon, Size = new Size(450, 300), StartPosition = FormStartPosition.CenterParent, BackColor = Color.FromArgb(30,30,35) };
-        Button btnWgraj = new Button { Text = "ZMIEŃ IKONĘ (PNG/JPG)", Location = new Point(20, 60), Size = new Size(380, 40), ForeColor = Color.Cyan, FlatStyle = FlatStyle.Flat };
-        
-        btnWgraj.Click += (s, e) => {
-            using (OpenFileDialog ofd = new OpenFileDialog()) {
-                ofd.Filter = "Obrazy|*.png;*.jpg";
-                if (ofd.ShowDialog() == DialogResult.OK) {
-                    iconPaths[selectedIcon] = ofd.FileName;
-                    ZapiszKonfiguracje();
-                    AnalizujDyskIBudujIkony();
-                    propForm.Close();
-                }
-            }
-        };
-        propForm.Controls.Add(btnWgraj);
-        propForm.ShowDialog();
+        btnPobierz.Enabled = true;
+        txtUrl.ReadOnly = false;
     }
+};
 
-    private static void UruchomZaznaczonaApke() { if (!string.IsNullOrEmpty(selectedIcon)) EmulujKomendeWTerminalu(selectedIcon); }
-
-    private static void ZapiszKonfiguracje()
-    {
-        try {
-            List<string> ln = new List<string>();
-            foreach (KeyValuePair<string, Point> pos in positions) {
-                string iPath = iconPaths.ContainsKey(pos.Key) ? iconPaths[pos.Key] : "none";
-                ln.Add(pos.Key + "," + pos.Value.X + "," + pos.Value.Y + "," + iPath);
-            }
-File.WriteAllLines(configPath, ln.ToArray());
-} catch { }
-}
-private static void WczytajKonfiguracje()
-{
-try {
-if (File.Exists(configPath)) {
-string[] ln = File.ReadAllLines(configPath);
-positions.Clear(); iconPaths.Clear();
-foreach (string l in ln) {
-string[] tk = l.Split(',');
-if (tk.Length == 4) {
-string key = tk.GetValue(0).ToString();
-int x = int.Parse(tk.GetValue(1).ToString());
-int y = int.Parse(tk.GetValue(2).ToString());
-string iPath = tk.GetValue(3).ToString();
-positions[key] = new Point(x, y);
-if (iPath != "none") iconPaths[key] = iPath;
-}
-}
-}
-} catch { }
-}
-}
+f.ShowDialog();
