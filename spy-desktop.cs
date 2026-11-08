@@ -17,7 +17,6 @@ public class Program
     private static Point startMousePos;
     private static string selectedIcon = "";
 
-    // PARAMETRY PRZEWIJANIA PULPITU (SCROLL)
     private static int obecnyScrollY = 0;
     private static int krokScrolla = 80;
 
@@ -33,18 +32,16 @@ public class Program
         f.StartPosition = FormStartPosition.CenterScreen;
         f.FormBorderStyle = FormBorderStyle.FixedSingle;
         f.MaximizeBox = false;
-        f.KeyPreview = true; // Wymagane do przechwytywania strzałek klawiatury
+        f.KeyPreview = true;
 
         WczytajKonfiguracje();
 
-        // Górny panel informacyjny
         Panel topBar = new Panel { Size = new Size(1150, 40), Location = new Point(0, 0), BackColor = Color.FromArgb(24, 26, 32) };
         f.Controls.Add(topBar);
 
         Label lblLogo = new Label { Text = "🔒 SPY-D SHELL // LIVE FILE-SYSTEM ENGINE ACTIVE (Klawisze GÓRA/DÓŁ przewijają pulpit)", Font = new Font("Segoe UI", 9, FontStyle.Bold), ForeColor = Color.Lime, Location = new Point(15, 12), Size = new Size(700, 20) };
         topBar.Controls.Add(lblLogo);
 
-        // Kontener główny pulpitu
         pnlPulpit = new Panel { Size = new Size(1150, 700), Location = new Point(0, 40), BackColor = Color.Transparent };
         f.Controls.Add(pnlPulpit);
 
@@ -52,7 +49,6 @@ public class Program
         menuIkony.Items.Add("Uruchom", null, (s, e) => UruchomZaznaczonaApke());
         menuIkony.Items.Add("Wlasciwosci", null, (s, e) => OtworzWlasciwosciApki());
 
-        // OBSŁUGA PRZEWIJANIA PULPITU ZA POMOCĄ KLAWISZY GÓRA / DÓŁ
         f.KeyDown += (s, e) => {
             if (e.KeyCode == Keys.Down)
             {
@@ -71,7 +67,6 @@ public class Program
             }
         };
 
-        // Analiza dysku i generowanie ikon
         AnalizujDyskIBudujIkony();
 
         Application.Run(f);
@@ -81,7 +76,6 @@ public class Program
     {
         pnlPulpit.Controls.Clear();
 
-        // Fizyczne skanowanie folderu src_repo w poszukiwaniu prawdziwych aplikacji
         string folderRepo = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "src_repo");
         if (!Directory.Exists(folderRepo))
         {
@@ -101,7 +95,6 @@ public class Program
             string pelnaSciezka = znalezionePliki[i];
             string nazwaApki = Path.GetFileName(pelnaSciezka);
 
-            // Wyliczanie automatycznej pozycji siatki, jeśli brak zapisanej w pliku cfg
             if (!positions.ContainsKey(nazwaApki))
             {
                 int kolumna = i % kolumnyNaEkran;
@@ -111,7 +104,6 @@ public class Program
 
             Point pozycja = positions[nazwaApki];
 
-            // Budowanie wizualnego kontenera ikony
             Panel pnlIkona = new Panel { Size = new Size(120, 110), Location = pozycja, BackColor = Color.FromArgb(30, 36, 45), BorderStyle = BorderStyle.FixedSingle, Tag = nazwaApki };
             pnlIkona.ContextMenuStrip = menuIkony;
 
@@ -126,7 +118,6 @@ public class Program
             pnlIkona.Controls.Add(pic);
             pnlIkona.Controls.Add(lbl);
 
-            // Obsługa przeciągania myszką
             pic.MouseDown += (s, e) => { if (e.Button == MouseButtons.Left) { isDragging = true; startMousePos = e.Location; selectedIcon = nazwaApki; } };
             pic.MouseMove += (s, e) => {
                 if (isDragging && selectedIcon == nazwaApki) {
@@ -145,7 +136,6 @@ public class Program
             pic.MouseEnter += (s, e) => selectedIcon = nazwaApki;
             lbl.MouseEnter += (s, e) => selectedIcon = nazwaApki;
 
-            // Bezpośredni rozkaz wykonania komendy bezpśrednio w Twoim jądre
             pic.DoubleClick += (s, e) => EmulujKomendeWTerminalu(nazwaApki);
             lbl.DoubleClick += (s, e) => EmulujKomendeWTerminalu(nazwaApki);
 
@@ -157,7 +147,6 @@ public class Program
 
     private static void PrzesunZawartoscPulpitu()
     {
-        // Przesuwa ikony w pionie w zależności od wykonanego scrolla klawiaturą
         foreach (Control c in pnlPulpit.Controls)
         {
             if (c is Panel && c.Tag != null)
@@ -192,7 +181,6 @@ public class Program
                                     TextBox txtInput = (TextBox)field.GetValue(openForm)!;
                                     txtInput.Invoke(new Action(() => {
                                         txtInput.Focus();
-                                        // Wywołuje stworzoną przez Ciebie komendę bezpośredniego rozruchu z parametrem nazwy
                                         txtInput.Text = "pulpit-start " + nazwaSkryptu; 
                                         SendKeys.Send("{ENTER}");
                                     }));
@@ -238,27 +226,28 @@ public class Program
                 string iPath = iconPaths.ContainsKey(pos.Key) ? iconPaths[pos.Key] : "none";
                 ln.Add(pos.Key + "," + pos.Value.X + "," + pos.Value.Y + "," + iPath);
             }
-File.WriteAllLines(configPath, ln.ToArray());
-} catch { }
-}
-private static void WczytajKonfiguracje()
-{
-try {
-if (File.Exists(configPath)) {
-string[] ln = File.ReadAllLines(configPath);
-positions.Clear(); iconPaths.Clear();
-foreach (string l in ln) {
-string[] tk = l.Split(',');
-if (tk.Length == 4) {
-string key = tk.GetValue(0).ToString();
-int x = int.Parse(tk.GetValue(1).ToString());
-int y = int.Parse(tk.GetValue(2).ToString());
-string iPath = tk.GetValue(3).ToString();
-positions[key] = new Point(x, y);
-if (iPath != "none") iconPaths[key] = iPath;
-}
-}
-}
-} catch { }
-}
+            File.WriteAllLines(configPath, ln.ToArray());
+        } catch { }
+    }
+
+    private static void WczytajKonfiguracje()
+    {
+        try {
+            if (File.Exists(configPath)) {
+                string[] ln = File.ReadAllLines(configPath);
+                positions.Clear(); iconPaths.Clear();
+                foreach (string l in ln) {
+                    string[] tk = l.Split(',');
+                    if (tk.Length == 4) {
+                        string key = tk[0];
+                        int x = int.Parse(tk[1]);
+                        int y = int.Parse(tk[2]);
+                        string iPath = tk[3];
+                        positions[key] = new Point(x, y);
+                        if (iPath != "none") iconPaths[key] = iPath;
+                    }
+                }
+            }
+        } catch { }
+    }
 }
