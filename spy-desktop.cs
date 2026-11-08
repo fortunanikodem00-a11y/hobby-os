@@ -220,7 +220,6 @@ public class Program
                         int x = int.Parse(tk.GetValue(1).ToString());
                         int y = int.Parse(tk.GetValue(2).ToString());
                         string iPath = tk.GetValue(3).ToString();
-                        
                         positions[key] = new Point(x, y);
 if (iPath != "none") iconPaths[key] = iPath;
 }
