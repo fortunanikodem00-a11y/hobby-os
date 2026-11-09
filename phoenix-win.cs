@@ -166,7 +166,7 @@ public class PhoenixWinDesktop
         File.Copy(csFile, Path.Combine(tempDir, "Program.cs"), true);
       
 char lt = (char)60, gt = (char)62;
- string csprojContent = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>";
+string csproj = $"{lt}Project Sdk='Microsoft.NET.Sdk'{gt}{lt}PropertyGroup{gt}{lt}OutputType{gt}WinExe{lt}/OutputType{gt}{lt}TargetFramework{gt}net10.0-windows{lt}/TargetFramework{gt}{lt}UseWindowsForms{gt}true{lt}/UseWindowsForms{gt}{lt}/PropertyGroup{gt}{lt}/Project{gt}";
 Process.Start(new ProcessStartInfo { FileName = "dotnet", Arguments = "run", WorkingDirectory = tempDir, UseShellExecute = true });
 }
 }
