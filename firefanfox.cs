@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -15,6 +14,8 @@ public class FirefoxHobbyOS
     private static readonly Color FxAccent = Color.FromArgb(255, 113, 57);
     private static readonly Color FxText = Color.FromArgb(251, 251, 254);
     private static readonly Color FxTextMuted = Color.FromArgb(177, 177, 179);
+
+    private static readonly string HomePageUrl = "https://duckduckgo.com";
 
     private static Panel pnlTabBar = null!;
     private static Panel pnlBrowserContainer = null!;
@@ -69,7 +70,7 @@ public class FirefoxHobbyOS
         };
         btnAddTab.FlatAppearance.BorderSize = 0;
         btnAddTab.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 49, 60);
-        btnAddTab.Click += (s, e) => DodajNowaKarte("about:home");
+        btnAddTab.Click += (s, e) => DodajNowaKarte(HomePageUrl);
         pnlTabBar.Controls.Add(btnAddTab);
 
         Panel pnlNavBar = new Panel
@@ -108,7 +109,7 @@ public class FirefoxHobbyOS
 
         lblLock = new Label
         {
-            Text = "🦊",
+            Text = "🔒",
             Location = new Point(8, 6),
             Size = new Size(24, 20),
             ForeColor = FxAccent,
@@ -151,10 +152,10 @@ public class FirefoxHobbyOS
         f.Controls.Add(pnlBookmarks);
         pnlBookmarks.BringToFront();
 
-        DodajZakladke(pnlBookmarks, "🦊 Strona startowa", "about:home", 12);
-        DodajZakladke(pnlBookmarks, "🌐 Wikipedia", "https://wikipedia.org", 150);
-        DodajZakladke(pnlBookmarks, "🦆 DuckDuckGo", "https://duckduckgo.com", 260);
-        DodajZakladke(pnlBookmarks, "💻 GitHub", "https://github.com", 380);
+        DodajZakladke(pnlBookmarks, "🦆 DuckDuckGo", "https://duckduckgo.com", 12);
+        DodajZakladke(pnlBookmarks, "🌐 Wikipedia", "https://wikipedia.org", 130);
+        DodajZakladke(pnlBookmarks, "💻 GitHub", "https://github.com", 240);
+        DodajZakladke(pnlBookmarks, "📰 Wykop", "https://wykop.pl", 330);
 
         pnlBrowserContainer = new Panel
         {
@@ -167,7 +168,7 @@ public class FirefoxHobbyOS
         btnBack.Click += (s, e) => { if (activeTab != null && activeTab.Web.CanGoBack) activeTab.Web.GoBack(); };
         btnForward.Click += (s, e) => { if (activeTab != null && activeTab.Web.CanGoForward) activeTab.Web.GoForward(); };
         btnRefresh.Click += (s, e) => { if (activeTab != null) activeTab.Web.Refresh(); };
-        btnHome.Click += (s, e) => Nawiguj("about:home");
+        btnHome.Click += (s, e) => Nawiguj(HomePageUrl);
 
         txtUrl.KeyDown += (s, e) =>
         {
@@ -178,7 +179,7 @@ public class FirefoxHobbyOS
             }
         };
 
-        DodajNowaKarte("about:home");
+        DodajNowaKarte(HomePageUrl);
 
         Application.Run(f);
     }
@@ -216,7 +217,7 @@ public class FirefoxHobbyOS
 
         Label lblTitle = new Label
         {
-            Text = "Nowa karta",
+            Text = "Ładowanie...",
             Location = new Point(30, 8),
             Size = new Size(148, 20),
             ForeColor = FxText,
@@ -262,16 +263,8 @@ public class FirefoxHobbyOS
             if (web.Url != null)
             {
                 string u = web.Url.ToString();
-                if (u == "about:blank")
-                {
-                    tab.CurrentUrl = "";
-                    lblTitle.Text = "Nowa karta";
-                }
-                else
-                {
-                    tab.CurrentUrl = u;
-                    lblTitle.Text = string.IsNullOrEmpty(web.DocumentTitle) ? web.Url.Host : web.DocumentTitle;
-                }
+                tab.CurrentUrl = u;
+                lblTitle.Text = string.IsNullOrEmpty(web.DocumentTitle) ? web.Url.Host : web.DocumentTitle;
 
                 if (activeTab == tab)
                 {
@@ -283,7 +276,7 @@ public class FirefoxHobbyOS
 
         web.DocumentCompleted += (s, e) =>
         {
-            if (web.Url != null && web.Url.ToString() != "about:blank" && !string.IsNullOrEmpty(web.DocumentTitle))
+            if (web.Url != null && !string.IsNullOrEmpty(web.DocumentTitle))
             {
                 lblTitle.Text = web.DocumentTitle;
             }
@@ -306,11 +299,10 @@ public class FirefoxHobbyOS
             bool isCurrent = (t == tab);
             t.Web.Visible = isCurrent;
             t.TabHeader.BackColor = isCurrent ? FxBgNav : FxBgTop;
-Używaj kodu z rozwagą.
-t.lblTitle.ForeColor = isCurrent ? FxText : FxTextMuted;
-foreach (Control c in t.TabHeader.Controls)
-{
-if (c.Tag?.ToString() == "accent") c.Visible = isCurrent;
+            t.lblTitle.ForeColor = isCurrent ? FxText : FxTextMuted;
+            foreach (Control c in t.TabHeader.Controls)
+            {
+if (c.Tag != null && c.Tag.ToString() == "accent") c.Visible = isCurrent;
 }
 }
 txtUrl.Text = tab.CurrentUrl;
@@ -320,7 +312,7 @@ private static void ZamknijKarte(BrowserTab tab)
 {
 if (tabs.Count == 1)
 {
-Nawiguj("about:home");
+Nawiguj(HomePageUrl);
 return;
 }
 int idx = tabs.IndexOf(tab);
@@ -348,15 +340,7 @@ private static void Nawiguj(string adres)
 {
 if (activeTab == null) return;
 adres = adres.Trim();
-if (adres == "about:home" || string.IsNullOrEmpty(adres))
-{
-activeTab.CurrentUrl = "";
-txtUrl.Text = "";
-lblLock.Text = "🦊";
-activeTab.lblTitle.Text = "Nowa karta";
-activeTab.Web.DocumentText = PobierzStroneStartowaHtml();
-return;
-}
+if (string.IsNullOrEmpty(adres)) return;
 if (!adres.StartsWith("http://") && !adres.StartsWith("https://"))
 {
 if (adres.Contains(".") && !adres.Contains(" "))
@@ -405,24 +389,6 @@ btn.FlatAppearance.BorderSize = 0;
 btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(66, 65, 77);
 btn.Click += (s, e) => Nawiguj(url);
 parent.Controls.Add(btn);
-}
-private static string PobierzStroneStartowaHtml()
-{
-StringBuilder sb = new StringBuilder();
-sb.AppendLine("<meta charset="utf-8">");
-sb.AppendLine("body { background-color: #2B2A33; color: #FBFBFE; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 85vh; margin: 0; }");
-sb.AppendLine(".logo { font-size: 64px; margin-bottom: 10px; }");
-sb.AppendLine("h1 { font-weight: 600; font-size: 28px; margin: 0 0 30px 0; }");
-sb.AppendLine(".search-box { display: flex; width: 580px; background: #42414D; border-radius: 8px; padding: 4px 12px; }");
-sb.AppendLine("input { flex: 1; background: transparent; border: none; color: white; font-size: 16px; padding: 12px; outline: none; }");
-sb.AppendLine("button { background: #FF7139; color: white; border: none; border-radius: 6px; padding: 0 20px; font-weight: bold; cursor: pointer; }");
-sb.AppendLine("");
-sb.AppendLine("<div class="logo">🦊Firefox");
-sb.AppendLine("<form class="search-box" action="duckduckgo.com" method="get">");
-sb.AppendLine("<input type="text" name="q" placeholder="Szukaj w sieci lub wpisz adres..." autofocus />");
-sb.AppendLine("<button type="submit">Szukaj");
-sb.AppendLine("");
-return sb.ToString();
 }
 private static void UstawNowoczesnySilnik()
 {
