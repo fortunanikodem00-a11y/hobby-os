@@ -15,7 +15,7 @@ public class FirefoxHobbyOS
     private static readonly Color FxText = Color.FromArgb(251, 251, 254);
     private static readonly Color FxTextMuted = Color.FromArgb(177, 177, 179);
 
-    private static readonly string HomePageUrl = "https://duckduckgo.com";
+    private static readonly string HomePageUrl = "https://google.com";
 
     private static Panel pnlTabBar = null!;
     private static Panel pnlBrowserContainer = null!;
@@ -152,10 +152,10 @@ public class FirefoxHobbyOS
         f.Controls.Add(pnlBookmarks);
         pnlBookmarks.BringToFront();
 
-        DodajZakladke(pnlBookmarks, "🦆 DuckDuckGo", "https://duckduckgo.com", 12);
-        DodajZakladke(pnlBookmarks, "🌐 Wikipedia", "https://wikipedia.org", 130);
-        DodajZakladke(pnlBookmarks, "💻 GitHub", "https://github.com", 240);
-        DodajZakladke(pnlBookmarks, "📰 Wykop", "https://wykop.pl", 330);
+        DodajZakladke(pnlBookmarks, "🔍 Google", "https://google.com", 12);
+        DodajZakladke(pnlBookmarks, "🌐 Wikipedia", "https://wikipedia.org", 105);
+        DodajZakladke(pnlBookmarks, "💻 GitHub", "https://github.com", 215);
+        DodajZakladke(pnlBookmarks, "📰 Wykop", "https://wykop.pl", 305);
 
         pnlBrowserContainer = new Panel
         {
@@ -217,7 +217,7 @@ public class FirefoxHobbyOS
 
         Label lblTitle = new Label
         {
-            Text = "Ładowanie...",
+            Text = "Google",
             Location = new Point(30, 8),
             Size = new Size(148, 20),
             ForeColor = FxText,
@@ -302,7 +302,7 @@ public class FirefoxHobbyOS
             t.lblTitle.ForeColor = isCurrent ? FxText : FxTextMuted;
             foreach (Control c in t.TabHeader.Controls)
             {
-if (c.Tag != null && c.Tag.ToString() == "accent") c.Visible = isCurrent;
+                if (c.Tag != null && c.Tag.ToString() == "accent") c.Visible = isCurrent;
 }
 }
 txtUrl.Text = tab.CurrentUrl;
@@ -349,7 +349,7 @@ adres = "https://" + adres;
 }
 else
 {
-adres = "duckduckgo.com" + Uri.EscapeDataString(adres);
+adres = "google.com" + Uri.EscapeDataString(adres);
 }
 }
 activeTab.Web.Navigate(adres);
