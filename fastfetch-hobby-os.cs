@@ -16,7 +16,7 @@ public class HobbyFastfetch : Form
     private static string repoPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @"source\repos\Hobby OS\Hobby OS\bin\Debug\net10.0-windows\src_repo");
     private static string[] githubLogoUrls = new string[]
     {
-https://github.com/fortunanikodem00-a11y/hobby-os/blob/main/hobby%20os%20logo.png?raw=true
+"https://github.com/fortunanikodem00-a11y/hobby-os/blob/main/hobby%20os%20logo.png?raw=true"
     };
 
     public HobbyFastfetch()
