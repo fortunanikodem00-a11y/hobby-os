@@ -16,7 +16,12 @@ public class Program
     private static string selectedIcon = "";
     private static int obecnyScrollY = 0;
     private static int krokScrolla = 80;
-    private static string folderRepo = "";
+    
+    // Dokładna ścieżka do Twojego folderu src_repo
+    private static string folderRepo = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        @"source\repos\Hobby OS\Hobby OS\bin\Debug\net10.0-windows\src_repo"
+    );
 
     [STAThread]
     public static void Main()
@@ -64,20 +69,6 @@ public class Program
             }
         };
 
-        // Bezpieczne wyszukiwanie folderu src_repo
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        folderRepo = Path.Combine(baseDir, "src_repo");
-
-        if (!Directory.Exists(folderRepo))
-        {
-            string uzytkownikPath = Path.Combine("C:\\Users", Environment.UserName, "source\\repos");
-            if (Directory.Exists(uzytkownikPath))
-            {
-                string? znaleziony = Directory.GetDirectories(uzytkownikPath, "src_repo", SearchOption.AllDirectories).FirstOrDefault();
-                if (!string.IsNullOrEmpty(znaleziony)) folderRepo = znaleziony;
-            }
-        }
-
         if (!Directory.Exists(folderRepo)) Directory.CreateDirectory(folderRepo);
 
         // Skanowanie plików .cs
@@ -85,7 +76,7 @@ public class Program
 
         if (pliki.Count == 0)
         {
-            pnlPulpit.Controls.Add(new Label { Text = "📂 [ Repozytorium src_repo puste ]\nWgraj skrypty .cs, aby automatycznie wyrenderować ikony.", ForeColor = Color.FromArgb(100, 110, 120), Font = new Font("Consolas", 10, FontStyle.Italic), Location = new Point(50, 50), Size = new Size(600, 50) });
+            pnlPulpit.Controls.Add(new Label { Text = "📂 [ Repozytorium src_repo puste ]\nŚcieżka: " + folderRepo, ForeColor = Color.FromArgb(100, 110, 120), Font = new Font("Consolas", 10, FontStyle.Italic), Location = new Point(50, 50), Size = new Size(800, 50) });
         }
 
         int i = 0;
