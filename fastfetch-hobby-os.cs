@@ -183,7 +183,7 @@ public class HobbyFastfetch : Form
         AppendColor($"{user}@{host}\n", Color.FromArgb(255, 85, 0), true);
         AppendColor("-------------------------------------\n", Color.Gray, false);
 
-        DodajLinie("OS", "HobbyOS // Phoenix Edition");
+        DodajLinie("OS", "HobbyOS");
         DodajLinie("Kernel", RuntimeInformation.OSDescription);
         DodajLinie("Uptime", $"{up.Days}d {up.Hours}h {up.Minutes}m");
         DodajLinie("Shell", "HobbyBash 1.0 (.NET " + Environment.Version + ")");
