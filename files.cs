@@ -230,7 +230,7 @@ public class HobbyAdvancedExplorer : Form
     private void OtworzPodgladTekstowy(string file)
     {
         Form viewer = new Form { Text = $"Podgląd pliku — {Path.GetFileName(file)}", Size = new Size(650, 450), BackColor = Color.FromArgb(30, 30, 36), StartPosition = FormStartPosition.CenterParent };
-        TextBox txt = new TextBox { MultiLine = true, Dock = DockStyle.Fill, BackColor = Color.FromArgb(30, 30, 36), ForeColor = Color.White, Font = new Font("Consolas", 11), BorderStyle = BorderStyle.None, ScrollBars = ScrollBars.Both, ReadOnly = true, Text = File.ReadAllText(file) };
+        TextBox txt = new TextBox { Multiline = true, Dock = DockStyle.Fill, BackColor = Color.FromArgb(30, 30, 36), ForeColor = Color.White, Font = new Font("Consolas", 11), BorderStyle = BorderStyle.None, ScrollBars = ScrollBars.Both, ReadOnly = true, Text = File.ReadAllText(file) };
         viewer.Controls.Add(txt);
         viewer.Show();
     }
