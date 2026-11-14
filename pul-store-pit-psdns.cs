@@ -15,9 +15,10 @@ public class PsdnsStore : Form
     private static readonly HttpClient http = new HttpClient();
 
       private const string ApiUrl =
-        "https://github.com";
+        "https://github.com" + "repos/fortunanikodem00-a11y/hobby-os/contents";
+
     private const string LogoUrl =
-        "https://githubusercontent.com";
+        "https://githubusercontent.com" + "fortunanikodem00-a11y/hobby-os/main/psdnsdigitalstore.png";
 
     private static readonly string RepoDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -125,7 +126,9 @@ public class PsdnsStore : Form
             }
 
             using JsonDocument doc = JsonDocument.Parse(json);
-            
+
+            int count = 0;
+            foreach (JsonElement item in doc.RootElement.EnumerateArray())
             {
                 string name = item.GetProperty("name").GetString() ?? "";
                 string dlUrl = item.GetProperty("download_url").GetString() ?? "";
