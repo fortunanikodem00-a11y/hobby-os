@@ -15,7 +15,7 @@ public class PsdnsStore : Form
     private static readonly HttpClient http = new HttpClient();
 
     private const string ApiUrl =
-        "https://github.com/fortunanikodem00-a11y/hobby-os";
+        "https://github.com";
     private const string LogoUrl =
         "https://github.com/fortunanikodem00-a11y/hobby-os/blob/main/psdnsdigitalstore.png?raw=true";
 
