@@ -14,11 +14,9 @@ public class PsdnsStore : Form
     private Label lblStatus = null!;
     private static readonly HttpClient http = new HttpClient();
 
-      private const string ApiUrl =
-        "https://github.com" + "repos/fortunanikodem00-a11y/hobby-os/contents";
+      private const string ApiUrl = "repos/fortunanikodem00-a11y/hobby-os/contents";
 
-    private const string LogoUrl =
-        "https://githubusercontent.com" + "fortunanikodem00-a11y/hobby-os/main/psdnsdigitalstore.png";
+    private const string LogoUrl = "fortunanikodem00-a11y/hobby-os/main/psdnsdigitalstore.png";
 
     private static readonly string RepoDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
