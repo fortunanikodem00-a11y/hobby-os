@@ -14,10 +14,10 @@ public class PsdnsStore : Form
     private Label lblStatus = null!;
     private static readonly HttpClient http = new HttpClient();
 
-    private const string ApiUrl =
+      private const string ApiUrl =
         "https://github.com";
     private const string LogoUrl =
-        "https://github.com/fortunanikodem00-a11y/hobby-os/blob/main/psdnsdigitalstore.png?raw=true";
+        "https://githubusercontent.com";
 
     private static readonly string RepoDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -31,11 +31,15 @@ public class PsdnsStore : Form
         StartPosition = FormStartPosition.CenterScreen;
 
         if (!http.DefaultRequestHeaders.Contains("User-Agent"))
+        {
             http.DefaultRequestHeaders.Add("User-Agent", "PSDNS-Store-HobbyOS");
+            http.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3+json");
+        }
 
         BuildUi();
         _ = LoadStoreAsync();
     }
+
 
     private void BuildUi()
     {
@@ -111,11 +115,17 @@ public class PsdnsStore : Form
 
         try
         {
-            string json = await http.GetStringAsync(ApiUrl);
-            using JsonDocument doc = JsonDocument.Parse(json);
+            HttpResponseMessage resp = await http.GetAsync(ApiUrl);
+            string json = await resp.Content.ReadAsStringAsync();
 
-            int count = 0;
-            foreach (JsonElement item in doc.RootElement.EnumerateArray())
+            if (!resp.IsSuccessStatusCode)
+            {
+                lblStatus.Text = $"GitHub API ({(int)resp.StatusCode}): sprawdź połączenie lub limit.";
+                return;
+            }
+
+            using JsonDocument doc = JsonDocument.Parse(json);
+            
             {
                 string name = item.GetProperty("name").GetString() ?? "";
                 string dlUrl = item.GetProperty("download_url").GetString() ?? "";
