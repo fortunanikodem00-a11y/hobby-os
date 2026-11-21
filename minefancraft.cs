@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -29,7 +28,7 @@ namespace HobbyOS.PullPity
         private const float ReachTiles = 5.5f;
 
         private readonly BlockType[,] _world = new BlockType[WorldWidth, WorldHeight];
-        private readonly Timer _gameTimer = new Timer();
+        private readonly System.Windows.Forms.Timer _gameTimer = new System.Windows.Forms.Timer();
         private readonly string _worldSavePath;
 
         private float _playerX = (WorldWidth / 2f) * TileSize;
@@ -126,7 +125,6 @@ namespace HobbyOS.PullPity
                     }
                 }
 
-                // Drzewa na trawie
                 if (_world[x, surface] == BlockType.Grass && x > 4 && x < WorldWidth - 5 && rng.Next(0, 9) == 0)
                 {
                     int trunkHeight = rng.Next(4, 6);
@@ -151,11 +149,10 @@ namespace HobbyOS.PullPity
                             }
                         }
                     }
-                    x += 2; // odstęp między drzewami
+                    x += 2;
                 }
             }
 
-            // Ustaw gracza bezpiecznie nad środkiem
             int spawnX = WorldWidth / 2;
             int spawnSurface = heights[spawnX];
             _playerX = spawnX * TileSize + (TileSize - PlayerW) / 2f;
@@ -216,7 +213,7 @@ namespace HobbyOS.PullPity
             }
         }
 
-        private void OnGameTick(object? sender, EventArgs e)
+        private void OnGameTick(object sender, EventArgs e)
         {
             float dt = _gameTimer.Interval / 1000f;
 
@@ -235,7 +232,6 @@ namespace HobbyOS.PullPity
             _vy += Gravity * dt;
             if (_vy > 22f) _vy = 22f;
 
-            // Ruch poziomy + kolizja
             float nextX = _playerX + _vx * TileSize * dt;
             nextX = Math.Clamp(nextX, 0, (WorldWidth * TileSize) - PlayerW);
             if (!CollidesWithSolid(nextX, _playerY, PlayerW, PlayerH))
@@ -243,7 +239,6 @@ namespace HobbyOS.PullPity
                 _playerX = nextX;
             }
 
-            // Ruch pionowy + kolizja
             float nextY = _playerY + _vy * TileSize * dt;
             _onGround = false;
 
@@ -267,7 +262,6 @@ namespace HobbyOS.PullPity
                 _vy = 0;
             }
 
-            // Kamera wyśrodkowana na graczu
             float targetCamX = _playerX + PlayerW / 2f - ClientSize.Width / 2f;
             float targetCamY = _playerY + PlayerH / 2f - ClientSize.Height / 2f;
 
@@ -329,7 +323,6 @@ namespace HobbyOS.PullPity
             {
                 if (_world[tx, ty] == BlockType.Air || _world[tx, ty] == BlockType.Water)
                 {
-                    // Nie stawiaj bloku dokładnie na ciele gracza
                     float bx = tx * TileSize;
                     float by = ty * TileSize;
                     bool overlapsPlayer =
@@ -432,7 +425,6 @@ namespace HobbyOS.PullPity
                 }
             }
 
-            // Podświetlenie kafelka pod kursorem
             int hoverTx = (int)((_mousePos.X + _camX) / TileSize);
             int hoverTy = (int)((_mousePos.Y + _camY) / TileSize);
             if (hoverTx >= 0 && hoverTx < WorldWidth && hoverTy >= 0 && hoverTy < WorldHeight)
@@ -443,7 +435,6 @@ namespace HobbyOS.PullPity
                 g.DrawRectangle(pen, hx, hy, TileSize, TileSize);
             }
 
-            // Gracz (Steve-style prosty model 2D)
             int px = (int)(_playerX - _camX);
             int py = (int)(_playerY - _camY);
             int headH = (int)(PlayerH * 0.30f);
@@ -463,7 +454,6 @@ namespace HobbyOS.PullPity
                 g.FillRectangle(eyeBrush, eyeX, py + (int)(headH * 0.38f), 4, 4);
             }
 
-            // Górny pasek informacyjny
             using (var hudBg = new SolidBrush(Color.FromArgb(150, 15, 20, 28)))
             using (var hudFont = new Font("Consolas", 10f, FontStyle.Bold))
             using (var hudText = new SolidBrush(Color.White))
@@ -474,7 +464,6 @@ namespace HobbyOS.PullPity
                     hudFont, hudText, 18, 16);
             }
 
-            // Dolny hotbar (1-7)
             int slotSize = 44;
             int gap = 8;
             int totalW = HotbarBlocks.Length * slotSize + (HotbarBlocks.Length - 1) * gap;
