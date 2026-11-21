@@ -1,0 +1,835 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.IO;
+using System.Windows.Forms;
+
+namespace HobbyOS.PullPity
+{
+    public enum VehicleKind
+    {
+        Sports,
+        Sedan,
+        Muscle,
+        Police
+    }
+
+    public sealed class StreetVehicle
+    {
+        public float X;
+        public float Y;
+        public float Vx;
+        public float Vy;
+        public float Angle; // w radianach
+        public float Speed;
+        public float Width;
+        public float Length;
+        public VehicleKind Kind;
+        public Color BodyColor;
+        public float TargetAngle;
+        public float AiTimer;
+        public bool SirensOn;
+    }
+
+    public sealed class NeonProp
+    {
+        public float X;
+        public float Y;
+        public float W;
+        public float H;
+        public Color GlowColor;
+        public string Label;
+
+        public NeonProp(float x, float y, float w, float h, Color glow, string label)
+        {
+            X = x;
+            Y = y;
+            W = w;
+            H = h;
+            GlowColor = glow;
+            Label = label;
+        }
+    }
+
+    public sealed class Vice6Form : Form
+    {
+        private const int WorldW = 3200;
+        private const int WorldH = 2400;
+        private const int BlockStep = 400; // siatka kwartałów miejskich
+
+        private readonly System.Windows.Forms.Timer _timer = new System.Windows.Forms.Timer();
+        private readonly Random _rng = new Random(6062026);
+        private readonly List<StreetVehicle> _vehicles = new List<StreetVehicle>();
+        private readonly List<NeonProp> _neons = new List<NeonProp>();
+        private readonly string _savePath;
+
+        private bool _up, _down, _left, _right, _sprint, _brake;
+        private bool _enterToggleQueued;
+
+        private float _playerX = 600f;
+        private float _playerY = 400f;
+        private float _playerAngle = 0f;
+        private float _playerSpeed = 0f;
+        private StreetVehicle _drivenVehicle = null;
+
+        private float _camX;
+        private float _camY;
+        private float _camShake;
+
+        private int _wantedLevel = 0;
+        private float _wantedDecayTimer = 0f;
+        private int _cash = 1250;
+        private int _stolenCars = 0;
+        private float _worldTime = 0f;
+        private string _bannerText = "VICE LEONIDA // WSIĄDŹ DO AUTA (F) I ZROBIŁO SIĘ GORĄCO";
+        private float _bannerTimer = 5.5f;
+
+        public Vice6Form()
+        {
+            Text = "HobbyOS Pull-Pit — VICE 6 (Neon Open-World Container)";
+            ClientSize = new Size(1180, 720);
+            DoubleBuffered = true;
+            KeyPreview = true;
+            BackColor = Color.FromArgb(14, 15, 26);
+
+            _savePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hobbyos_vice6_save.txt");
+            LoadStats();
+            BuildCityProps();
+            SpawnTraffic();
+
+            _timer.Interval = 16; // ~60 FPS
+            _timer.Tick += OnTick;
+            _timer.Start();
+        }
+
+        private void LoadStats()
+        {
+            try
+            {
+                if (!File.Exists(_savePath)) return;
+                string[] lines = File.ReadAllLines(_savePath);
+                if (lines.Length >= 2)
+                {
+                    if (int.TryParse(lines[0], out int c)) _cash = Math.Max(0, c);
+                    if (int.TryParse(lines[1], out int s)) _stolenCars = Math.Max(0, s);
+                }
+            }
+            catch
+            {
+                // Ignoruj błędy odczytu
+            }
+        }
+
+        private void SaveStats()
+        {
+            try
+            {
+                File.WriteAllLines(_savePath, new[]
+                {
+                    _cash.ToString(),
+                    _stolenCars.ToString()
+                });
+                SetBanner("ZAPISANO STATYSTYKI W KATALOGU ROBOCZYM", 2.0f);
+            }
+            catch
+            {
+                // Ignoruj błędy zapisu
+            }
+        }
+
+        private void SetBanner(string text, float seconds)
+        {
+            _bannerText = text;
+            _bannerTimer = seconds;
+        }
+
+        private void BuildCityProps()
+        {
+            _neons.Clear();
+            Color[] palette =
+            {
+                Color.FromArgb(255, 65, 165), // neon róż / magenta
+                Color.FromArgb(45, 235, 255), // cyan
+                Color.FromArgb(255, 155, 45), // zachód słońca pomarańcz
+                Color.FromArgb(170, 95, 255)  // fiolet
+            };
+
+            string[] signs =
+            {
+                "LEONIDA CLUB",
+                "SUNSET MOTEL",
+                "VICE CUSTOMS",
+                "OCEAN DRIVE",
+                "CLUB MALIBU 6",
+                "PINK PALMS"
+            };
+
+            int idx = 0;
+            for (int gx = 1; gx < WorldW / BlockStep; gx++)
+            {
+                for (int gy = 1; gy < WorldH / BlockStep; gy++)
+                {
+                    if ((gx + gy) % 2 == 0)
+                    {
+                        float x = gx * BlockStep + 95;
+                        float y = gy * BlockStep + 95;
+                        float w = BlockStep - 190;
+                        float h = BlockStep - 190;
+                        Color c = palette[idx % palette.Length];
+                        string lbl = signs[idx % signs.Length];
+                        _neons.Add(new NeonProp(x, y, w, h, c, lbl));
+                        idx++;
+                    }
+                }
+            }
+        }
+
+        private void SpawnTraffic()
+        {
+            _vehicles.Clear();
+            Color[] carColors =
+            {
+                Color.FromArgb(245, 70, 145),
+                Color.FromArgb(55, 195, 245),
+                Color.FromArgb(250, 175, 50),
+                Color.FromArgb(230, 235, 245),
+                Color.FromArgb(120, 225, 145),
+                Color.FromArgb(225, 85, 75)
+            };
+
+            for (int i = 0; i < 24; i++)
+            {
+                bool horizontal = i % 2 == 0;
+                int roadLine = _rng.Next(1, WorldH / BlockStep) * BlockStep;
+                float posAlong = _rng.Next(150, WorldW - 150);
+
+                var kind = (VehicleKind)(i % 3); // Sports, Sedan, Muscle
+                float len = kind == VehicleKind.Sports ? 54f : (kind == VehicleKind.Muscle ? 52f : 48f);
+                float wid = 24f;
+
+                var v = new StreetVehicle
+                {
+                    X = horizontal ? posAlong : roadLine,
+                    Y = horizontal ? roadLine : posAlong,
+                    Angle = horizontal ? (_rng.Next(2) == 0 ? 0f : (float)Math.PI) : (_rng.Next(2) == 0 ? (float)(Math.PI / 2) : (float)(-Math.PI / 2)),
+                    Speed = 120f + _rng.Next(0, 80),
+                    Width = wid,
+                    Length = len,
+                    Kind = kind,
+                    BodyColor = carColors[_rng.Next(carColors.Length)],
+                    AiTimer = (float)(_rng.NextDouble() * 3.0)
+                };
+                v.TargetAngle = v.Angle;
+                _vehicles.Add(v);
+            }
+
+            // Radiowozy
+            for (int p = 0; p < 5; p++)
+            {
+                var cop = new StreetVehicle
+                {
+                    X = 1200f + p * 260f,
+                    Y = 800f,
+                    Angle = 0f,
+                    Speed = 0f,
+                    Width = 25f,
+                    Length = 52f,
+                    Kind = VehicleKind.Police,
+                    BodyColor = Color.FromArgb(240, 244, 250),
+                    SirensOn = false
+                };
+                cop.TargetAngle = cop.Angle;
+                _vehicles.Add(cop);
+            }
+        }
+
+        private void ResetSession()
+        {
+            _drivenVehicle = null;
+            _playerX = 600f;
+            _playerY = 400f;
+            _playerAngle = 0f;
+            _playerSpeed = 0f;
+            _wantedLevel = 0;
+            _wantedDecayTimer = 0f;
+            SpawnTraffic();
+            SetBanner("NOWA SESJA W LEONIDZIE", 2.5f);
+        }
+
+        private void OnTick(object sender, EventArgs e)
+        {
+            float dt = _timer.Interval / 1000f;
+            _worldTime += dt;
+
+            if (_bannerTimer > 0f)
+            {
+                _bannerTimer = Math.Max(0f, _bannerTimer - dt);
+            }
+
+            if (_camShake > 0f)
+            {
+                _camShake = Math.Max(0f, _camShake - dt * 28f);
+            }
+
+            if (_enterToggleQueued)
+            {
+                _enterToggleQueued = false;
+                ToggleEnterExitVehicle();
+            }
+
+            UpdatePlayer(dt);
+            UpdateTrafficAndPolice(dt);
+            UpdateWantedSystem(dt);
+            UpdateCamera();
+
+            Invalidate();
+        }
+
+        private void ToggleEnterExitVehicle()
+        {
+            if (_drivenVehicle != null)
+            {
+                // Wysiadanie z auta
+                float exitOffset = _drivenVehicle.Width * 0.5f + 16f;
+                float perpX = -(float)Math.Sin(_drivenVehicle.Angle);
+                float perpY = (float)Math.Cos(_drivenVehicle.Angle);
+
+                _playerX = Math.Clamp(_drivenVehicle.X + perpX * exitOffset, 20f, WorldW - 20f);
+                _playerY = Math.Clamp(_drivenVehicle.Y + perpY * exitOffset, 20f, WorldH - 20f);
+                _playerSpeed = 0f;
+                _drivenVehicle = null;
+                SetBanner("WYSIADŁEŚ Z POJAZDU", 1.8f);
+                return;
+            }
+
+            // Szukaj najbliższego pojazdu w zasięgu 52 px
+            StreetVehicle best = null;
+            float bestDist = 52f;
+            foreach (var v in _vehicles)
+            {
+                float dx = v.X - _playerX;
+                float dy = v.Y - _playerY;
+                float d = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = v;
+                }
+            }
+
+            if (best != null)
+            {
+                _drivenVehicle = best;
+                _stolenCars++;
+                _cash += best.Kind == VehicleKind.Sports ? 250 : 100;
+                if (best.Kind == VehicleKind.Police)
+                {
+                    BumpWanted(2, "UKRADZIONO RADIOWÓZ!");
+                }
+                else
+                {
+                    BumpWanted(1, best.Kind == VehicleKind.Sports ? "PORWANO SUPERSPORT (+250$)" : "PORWANO AUTO (+100$)");
+                }
+            }
+        }
+
+        private void BumpWanted(int addStars, string reason)
+        {
+            int prev = _wantedLevel;
+            _wantedLevel = Math.Clamp(_wantedLevel + addStars, 0, 5);
+            _wantedDecayTimer = 8.0f;
+            if (_wantedLevel > prev)
+            {
+                SetBanner($"{reason} // WANTED {_wantedLevel}★", 3.0f);
+            }
+        }
+
+        private void UpdatePlayer(float dt)
+        {
+            if (_drivenVehicle != null)
+            {
+                var car = _drivenVehicle;
+                float accel = car.Kind == VehicleKind.Sports ? 540f : (car.Kind == VehicleKind.Muscle ? 480f : 390f);
+                float maxSpeed = car.Kind == VehicleKind.Sports ? 540f : (car.Kind == VehicleKind.Muscle ? 460f : 380f);
+                float turnRate = car.Kind == VehicleKind.Sports ? 3.5f : 2.9f;
+
+                if (_up) car.Speed += accel * dt;
+                else if (_down) car.Speed -= accel * 0.85f * dt;
+                else car.Speed *= (float)Math.Pow(0.28, dt);
+
+                if (_brake)
+                {
+                    car.Speed *= (float)Math.Pow(0.04, dt);
+                }
+
+                car.Speed = Math.Clamp(car.Speed, -maxSpeed * 0.4f, maxSpeed);
+
+                float steerInput = 0f;
+                if (_left) steerInput -= 1f;
+                if (_right) steerInput += 1f;
+
+                if (Math.Abs(car.Speed) > 12f && Math.Abs(steerInput) > 0.01f)
+                {
+                    float reverseSign = car.Speed >= 0f ? 1f : -1f;
+                    float speedFactor = Math.Min(1f, Math.Abs(car.Speed) / 140f);
+                    car.Angle += steerInput * turnRate * speedFactor * reverseSign * dt;
+                }
+
+                float moveX = (float)Math.Cos(car.Angle) * car.Speed * dt;
+                float moveY = (float)Math.Sin(car.Angle) * car.Speed * dt;
+
+                car.X += moveX;
+                car.Y += moveY;
+
+                // Odbicie od granic miasta
+                if (car.X < 30f) { car.X = 30f; car.Speed *= -0.4f; }
+                if (car.X > WorldW - 30f) { car.X = WorldW - 30f; car.Speed *= -0.4f; }
+                if (car.Y < 30f) { car.Y = 30f; car.Speed *= -0.4f; }
+                if (car.Y > WorldH - 30f) { car.Y = WorldH - 30f; car.Speed *= -0.4f; }
+
+                // Kolizja z innymi autami
+                foreach (var other in _vehicles)
+                {
+                    if (other == car) continue;
+                    float dx = other.X - car.X;
+                    float dy = other.Y - car.Y;
+                    float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                    float minDist = (car.Width + other.Width) * 0.85f;
+                    if (dist > 0.001f && dist < minDist)
+                    {
+                        float nx = dx / dist;
+                        float ny = dy / dist;
+                        float overlap = minDist - dist;
+                        car.X -= nx * overlap * 0.5f;
+                        car.Y -= ny * overlap * 0.5f;
+                        other.X += nx * overlap * 0.5f;
+                        other.Y += ny * overlap * 0.5f;
+
+                        if (Math.Abs(car.Speed) > 160f)
+                        {
+                            other.Vx += nx * Math.Abs(car.Speed) * 0.45f;
+                            other.Vy += ny * Math.Abs(car.Speed) * 0.45f;
+                            car.Speed *= 0.65f;
+                            _camShake = 7f;
+                            if (other.Kind == VehicleKind.Police)
+                            {
+                                BumpWanted(1, "STARANOWANO RADIOWÓZ!");
+                            }
+                        }
+                    }
+                }
+
+                _playerX = car.X;
+                _playerY = car.Y;
+                _playerAngle = car.Angle;
+                _playerSpeed = car.Speed;
+            }
+            else
+            {
+                // Ruch pieszy
+                float moveX = 0f;
+                float moveY = 0f;
+                if (_up) moveY -= 1f;
+                if (_down) moveY += 1f;
+                if (_left) moveX -= 1f;
+                if (_right) moveX += 1f;
+
+                if (moveX != 0f || moveY != 0f)
+                {
+                    float len = (float)Math.Sqrt(moveX * moveX + moveY * moveY);
+                    moveX /= len;
+                    moveY /= len;
+
+                    float walkSpeed = _sprint ? 235f : 145f;
+                    _playerX = Math.Clamp(_playerX + moveX * walkSpeed * dt, 20f, WorldW - 20f);
+                    _playerY = Math.Clamp(_playerY + moveY * walkSpeed * dt, 20f, WorldH - 20f);
+                    _playerAngle = (float)Math.Atan2(moveY, moveX);
+                    _playerSpeed = walkSpeed;
+                }
+                else
+                {
+                    _playerSpeed = 0f;
+                }
+            }
+        }
+
+        private void UpdateTrafficAndPolice(float dt)
+        {
+            foreach (var v in _vehicles)
+            {
+                if (v == _drivenVehicle) continue;
+
+                if (v.Kind == VehicleKind.Police && _wantedLevel > 0)
+                {
+                    v.SirensOn = true;
+                    float dx = _playerX - v.X;
+                    float dy = _playerY - v.Y;
+                    float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                    float desiredAngle = (float)Math.Atan2(dy, dx);
+
+                    float diff = NormalizeAngle(desiredAngle - v.Angle);
+                    v.Angle += Math.Clamp(diff, -3.2f * dt, 3.2f * dt);
+
+                    float topCopSpeed = 290f + _wantedLevel * 42f;
+                    v.Speed = dist > 70f ? topCopSpeed : topCopSpeed * 0.65f;
+
+                    v.X += (float)Math.Cos(v.Angle) * v.Speed * dt;
+                    v.Y += (float)Math.Sin(v.Angle) * v.Speed * dt;
+
+                    // Kontakt policji z graczem podbija wanted
+                    if (dist < 42f)
+                    {
+                        _camShake = 5f;
+                        if (Math.Abs(_playerSpeed) > 120f)
+                        {
+                            BumpWanted(1, "KONTAKT Z POLICJĄ!");
+                        }
+                    }
+                }
+                else
+                {
+                    if (v.Kind == VehicleKind.Police) v.SirensOn = false;
+
+                    v.AiTimer -= dt;
+                    if (v.AiTimer <= 0f)
+                    {
+                        v.AiTimer = 2.0f + (float)_rng.NextDouble() * 3.0f;
+                        // Trzymaj się siatki ulic
+                        bool nearHorizontalRoad = Math.Abs(v.Y % BlockStep) < 35f;
+                        bool nearVerticalRoad = Math.Abs(v.X % BlockStep) < 35f;
+                        if (nearHorizontalRoad && nearVerticalRoad && _rng.Next(2) == 0)
+                        {
+                            float[] dirs = { 0f, (float)(Math.PI / 2), (float)Math.PI, (float)(-Math.PI / 2) };
+                            v.TargetAngle = dirs[_rng.Next(dirs.Length)];
+                        }
+                    }
+
+                    float angleDiff = NormalizeAngle(v.TargetAngle - v.Angle);
+                    v.Angle += Math.Clamp(angleDiff, -2.5f * dt, 2.5f * dt);
+
+                    float cruise = v.Kind == VehicleKind.Sports ? 185f : 140f;
+                    v.Speed += (cruise - v.Speed) * 2.0f * dt;
+
+                    v.X += (float)Math.Cos(v.Angle) * v.Speed * dt + v.Vx * dt;
+                    v.Y += (float)Math.Sin(v.Angle) * v.Speed * dt + v.Vy * dt;
+
+                    v.Vx *= (float)Math.Pow(0.08, dt);
+                    v.Vy *= (float)Math.Pow(0.08, dt);
+
+                    if (v.X < 60f) { v.X = 60f; v.TargetAngle = 0f; }
+                    if (v.X > WorldW - 60f) { v.X = WorldW - 60f; v.TargetAngle = (float)Math.PI; }
+                    if (v.Y < 60f) { v.Y = 60f; v.TargetAngle = (float)(Math.PI / 2); }
+                    if (v.Y > WorldH - 60f) { v.Y = WorldH - 60f; v.TargetAngle = (float)(-Math.PI / 2); }
+                }
+            }
+        }
+
+        private void UpdateWantedSystem(float dt)
+        {
+            if (_wantedLevel <= 0) return;
+
+            bool copVeryClose = false;
+            foreach (var v in _vehicles)
+            {
+                if (v.Kind != VehicleKind.Police) continue;
+                float dx = v.X - _playerX;
+                float dy = v.Y - _playerY;
+                if (dx * dx + dy * dy < 320f * 320f)
+                {
+                    copVeryClose = true;
+                    break;
+                }
+            }
+
+            if (!copVeryClose)
+            {
+                _wantedDecayTimer -= dt;
+                if (_wantedDecayTimer <= 0f)
+                {
+                    _wantedLevel = Math.Max(0, _wantedLevel - 1);
+                    _wantedDecayTimer = 7.0f;
+                    if (_wantedLevel == 0)
+                    {
+                        SetBanner("ZGUBIONO POŚCIG W LEONIDZIE", 2.5f);
+                    }
+                }
+            }
+            else
+            {
+                _wantedDecayTimer = 8.0f;
+            }
+        }
+
+        private void UpdateCamera()
+        {
+            float targetX = _playerX - ClientSize.Width / 2f;
+            float targetY = _playerY - ClientSize.Height / 2f;
+
+            float maxX = Math.Max(0f, WorldW - ClientSize.Width);
+            float maxY = Math.Max(0f, WorldH - ClientSize.Height);
+
+            _camX = Math.Clamp(targetX, 0f, maxX);
+            _camY = Math.Clamp(targetY, 0f, maxY);
+
+            if (_camShake > 0.1f)
+            {
+                _camX += (float)((_rng.NextDouble() * 2.0 - 1.0) * _camShake);
+                _camY += (float)((_rng.NextDouble() * 2.0 - 1.0) * _camShake);
+            }
+        }
+
+        private static float NormalizeAngle(float a)
+        {
+            while (a > Math.PI) a -= (float)(2.0 * Math.PI);
+            while (a < -Math.PI) a += (float)(2.0 * Math.PI);
+            return a;
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.W || e.KeyCode == Keys.Up) _up = true;
+            if (e.KeyCode == Keys.S && !e.Control) _down = true;
+            if (e.KeyCode == Keys.Down) _down = true;
+            if (e.KeyCode == Keys.A || e.KeyCode == Keys.Left) _left = true;
+            if (e.KeyCode == Keys.D || e.KeyCode == Keys.Right) _right = true;
+            if (e.KeyCode == Keys.ShiftKey) _sprint = true;
+            if (e.KeyCode == Keys.Space) _brake = true;
+
+            if (e.KeyCode == Keys.F || e.KeyCode == Keys.E)
+            {
+                _enterToggleQueued = true;
+            }
+            else if (e.KeyCode == Keys.R)
+            {
+                ResetSession();
+            }
+            else if (e.KeyCode == Keys.K)
+            {
+                SaveStats();
+            }
+        }
+
+        protected override void OnKeyUp(KeyEventArgs e)
+        {
+            base.OnKeyUp(e);
+            if (e.KeyCode == Keys.W || e.KeyCode == Keys.Up) _up = false;
+            if (e.KeyCode == Keys.S || e.KeyCode == Keys.Down) _down = false;
+            if (e.KeyCode == Keys.A || e.KeyCode == Keys.Left) _left = false;
+            if (e.KeyCode == Keys.D || e.KeyCode == Keys.Right) _right = false;
+            if (e.KeyCode == Keys.ShiftKey) _sprint = false;
+            if (e.KeyCode == Keys.Space) _brake = false;
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            SaveStats();
+            _timer.Stop();
+            _timer.Dispose();
+            base.OnFormClosing(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            g.TranslateTransform(-_camX, -_camY);
+
+            // Podłoże / kwartały miejskie
+            using (var blockBrush = new SolidBrush(Color.FromArgb(24, 26, 42)))
+            using (var roadBrush = new SolidBrush(Color.FromArgb(38, 41, 58)))
+            using (var linePen = new Pen(Color.FromArgb(140, 255, 200, 90), 1.5f) { DashStyle = DashStyle.Dash })
+            {
+                g.FillRectangle(roadBrush, 0, 0, WorldW, WorldH);
+
+                for (int gx = 0; gx < WorldW / BlockStep; gx++)
+                {
+                    for (int gy = 0; gy < WorldH / BlockStep; gy++)
+                    {
+                        float bx = gx * BlockStep + 48f;
+                        float by = gy * BlockStep + 48f;
+                        float bw = BlockStep - 96f;
+                        float bh = BlockStep - 96f;
+                        if (bw > 20f && bh > 20f)
+                        {
+                            g.FillRectangle(blockBrush, bx, by, bw, bh);
+                        }
+                    }
+                }
+
+                for (int x = 0; x <= WorldW; x += BlockStep)
+                {
+                    g.DrawLine(linePen, x, 0, x, WorldH);
+                }
+                for (int y = 0; y <= WorldH; y += BlockStep)
+                {
+                    g.DrawLine(linePen, 0, y, WorldW, y);
+                }
+            }
+
+            // Neonowe budynki / szyldy w stylu Vice
+            using var signFont = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            foreach (var prop in _neons)
+            {
+                using var glowPen = new Pen(Color.FromArgb(170, prop.GlowColor), 2.5f);
+                using var textBrush = new SolidBrush(prop.GlowColor);
+                g.DrawRectangle(glowPen, prop.X, prop.Y, prop.W, prop.H);
+                g.DrawString(prop.Label, signFont, textBrush, prop.X + 8f, prop.Y + 8f);
+            }
+
+            // Pojazdy
+            foreach (var v in _vehicles)
+            {
+                DrawVehicle(g, v);
+            }
+
+            // Pieszy gracz (gdy nie siedzi w aucie)
+            if (_drivenVehicle == null)
+            {
+                var state = g.Save();
+                g.TranslateTransform(_playerX, _playerY);
+                g.RotateTransform(_playerAngle * 180f / (float)Math.PI);
+
+                using var bodyBrush = new SolidBrush(Color.FromArgb(255, 75, 165));
+                using var headBrush = new SolidBrush(Color.FromArgb(245, 200, 165));
+                using var outlinePen = new Pen(Color.White, 1.5f);
+
+                g.FillEllipse(bodyBrush, -10f, -10f, 20f, 20f);
+                g.DrawEllipse(outlinePen, -10f, -10f, 20f, 20f);
+                g.FillEllipse(headBrush, 2f, -5f, 10f, 10f);
+
+                g.Restore(state);
+            }
+
+            g.ResetTransform();
+
+            DrawHud(g);
+            DrawMinimap(g);
+        }
+
+        private void DrawVehicle(Graphics g, StreetVehicle v)
+        {
+            var state = g.Save();
+            g.TranslateTransform(v.X, v.Y);
+            g.RotateTransform(v.Angle * 180f / (float)Math.PI);
+
+            float halfL = v.Length * 0.5f;
+            float halfW = v.Width * 0.5f;
+
+            using (var bodyBrush = new SolidBrush(v.BodyColor))
+            using (var cabinBrush = new SolidBrush(Color.FromArgb(22, 26, 38)))
+            using (var borderPen = new Pen(Color.FromArgb(220, 10, 12, 18), 1.5f))
+            {
+                g.FillRectangle(bodyBrush, -halfL, -halfW, v.Length, v.Width);
+                g.DrawRectangle(borderPen, -halfL, -halfW, v.Length, v.Width);
+                g.FillRectangle(cabinBrush, -halfL * 0.35f, -halfW * 0.72f, v.Length * 0.52f, v.Width * 0.72f * 2f);
+            }
+
+            // Światła przednie
+            using (var headBrush = new SolidBrush(Color.FromArgb(220, 255, 245, 195)))
+            {
+                g.FillRectangle(headBrush, halfL - 3f, -halfW + 3f, 3f, 5f);
+                g.FillRectangle(headBrush, halfL - 3f, halfW - 8f, 3f, 5f);
+            }
+
+            // Syreny policyjne
+            if (v.Kind == VehicleKind.Police || v.SirensOn)
+            {
+                bool redPhase = ((int)(_worldTime * 10f)) % 2 == 0;
+                using var redBrush = new SolidBrush(redPhase ? Color.FromArgb(255, 45, 75) : Color.FromArgb(90, 20, 35));
+                using var blueBrush = new SolidBrush(!redPhase ? Color.FromArgb(45, 175, 255) : Color.FromArgb(20, 55, 95));
+                g.FillRectangle(redBrush, -4f, -halfW + 2f, 8f, halfW - 2f);
+                g.FillRectangle(blueBrush, -4f, 0f, 8f, halfW - 2f);
+            }
+
+            g.Restore(state);
+        }
+
+        private void DrawHud(Graphics g)
+        {
+            using var panelBrush = new SolidBrush(Color.FromArgb(175, 16, 18, 30));
+            using var neonPink = new SolidBrush(Color.FromArgb(255, 80, 175));
+            using var cyanBrush = new SolidBrush(Color.FromArgb(70, 235, 255));
+            using var goldBrush = new SolidBrush(Color.FromArgb(255, 210, 75));
+            using var whiteBrush = new SolidBrush(Color.White);
+
+            using var titleFont = new Font("Consolas", 11f, FontStyle.Bold);
+            using var hudFont = new Font("Consolas", 9.5f, FontStyle.Bold);
+
+            // Lewy górny panel: VICE 6 + Wanted + Kasa
+            g.FillRectangle(panelBrush, 14, 14, 340, 96);
+            g.DrawString("VICE 6 // LEONIDA STREETS", titleFont, neonPink, 24, 20);
+
+            string stars = new string('★', _wantedLevel) + new string('☆', Math.Max(0, 5 - _wantedLevel));
+            g.DrawString($"WANTED: {stars}", hudFont, _wantedLevel > 0 ? neonPink : whiteBrush, 24, 45);
+
+            int speedKmh = (int)(Math.Abs(_playerSpeed) * 0.32f);
+            string mode = _drivenVehicle != null ? $"AUTO ({_drivenVehicle.Kind})" : "PIESZO";
+            g.DrawString($"${_cash}  |  KRADZIEŻE: {_stolenCars}  |  {speedKmh} KM/H", hudFont, goldBrush, 24, 68);
+            g.DrawString($"TRYB: {mode}  |  [F] WSIĄDŹ/WYSIĄDŹ  [K] ZAPIS  [R] RESET", hudFont, cyanBrush, 24, 88);
+
+            // Banner informacyjny na środku góry
+            if (_bannerTimer > 0f)
+            {
+                SizeF sz = g.MeasureString(_bannerText, titleFont);
+                float bx = (ClientSize.Width - sz.Width - 28f) * 0.5f;
+                g.FillRectangle(panelBrush, bx, 16, sz.Width + 28f, 34);
+                g.DrawString(_bannerText, titleFont, goldBrush, bx + 14f, 23);
+            }
+        }
+
+        private void DrawMinimap(Graphics g)
+        {
+            int mapW = 190;
+            int mapH = 142;
+            int mx = ClientSize.Width - mapW - 16;
+            int my = ClientSize.Height - mapH - 16;
+
+            float sx = (float)mapW / WorldW;
+            float sy = (float)mapH / WorldH;
+
+            using var bgBrush = new SolidBrush(Color.FromArgb(195, 12, 14, 24));
+            using var borderPen = new Pen(Color.FromArgb(70, 235, 255), 2f);
+            using var roadPen = new Pen(Color.FromArgb(90, 95, 120, 155), 1f);
+
+            g.FillRectangle(bgBrush, mx, my, mapW, mapH);
+
+            for (int x = 0; x <= WorldW; x += BlockStep)
+            {
+                float px = mx + x * sx;
+                g.DrawLine(roadPen, px, my, px, my + mapH);
+            }
+            for (int y = 0; y <= WorldH; y += BlockStep)
+            {
+                float py = my + y * sy;
+                g.DrawLine(roadPen, mx, py, mx + mapW, py);
+            }
+
+            foreach (var v in _vehicles)
+            {
+                float vx = mx + v.X * sx;
+                float vy = my + v.Y * sy;
+                var dotColor = v.Kind == VehicleKind.Police ? Color.FromArgb(255, 60, 90) : Color.FromArgb(140, 175, 210);
+                using var dotBrush = new SolidBrush(dotColor);
+                g.FillEllipse(dotBrush, vx - 2.5f, vy - 2.5f, 5f, 5f);
+            }
+
+            float plx = mx + _playerX * sx;
+            float ply = my + _playerY * sy;
+            using var pBrush = new SolidBrush(Color.FromArgb(255, 85, 180));
+            g.FillEllipse(pBrush, plx - 4f, ply - 4f, 8f, 8f);
+
+            g.DrawRectangle(borderPen, mx, my, mapW, mapH);
+        }
+
+        [STAThread]
+        public static void Main()
+        {
+            ApplicationConfiguration.Initialize();
+            Application.Run(new Vice6Form());
+        }
+    }
+}
