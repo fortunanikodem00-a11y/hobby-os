@@ -133,6 +133,8 @@ namespace HobbyOS.PullPity
             Text = "HobbyOS — WinOneShell";
             ClientSize = new Size(1240, 740);
             MinimumSize = new Size(680, 420);
+            StartPosition = FormStartPosition.CenterScreen;
+            ShowInTaskbar = true;
             DoubleBuffered = true;
             KeyPreview = true;
 
@@ -177,7 +179,6 @@ namespace HobbyOS.PullPity
 
                         if (!isTempHobbyOsApp)
                         {
-                            // Jeśli w tym katalogu jest src_repo lub wiele plików .cs, to najpewniej główny katalog HobbyOS
                             if (Directory.Exists(Path.Combine(cur, "src_repo")) || depth == 0)
                             {
                                 return cur;
@@ -191,7 +192,6 @@ namespace HobbyOS.PullPity
                 }
                 catch
                 {
-                    // Przejdź do kolejnego kandydata
                 }
             }
 
@@ -470,7 +470,6 @@ namespace HobbyOS.PullPity
                 File.WriteAllText(csprojPath, csprojContent);
                 File.Copy(icon.FilePath, programCsPath, true);
 
-                // Przekazujemy _hobbyOsRootDir, żeby każda kolejna apka potomna i potomna potomnych znała główny katalog HobbyOS
                 var psi = new ProcessStartInfo
                 {
                     FileName = "dotnet",
@@ -485,6 +484,7 @@ namespace HobbyOS.PullPity
             catch (Exception ex)
             {
                 _statusMessage = "Błąd uruchamiania: " + ex.Message;
+                MessageBox.Show(this, ex.ToString(), "Błąd startu aplikacji", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
 
             Invalidate();
@@ -793,6 +793,15 @@ namespace HobbyOS.PullPity
             var prevClip = g.ClipBounds;
             g.SetClip(new Rectangle(0, 0, ClientSize.Width, workH));
 
+            if (desk.Icons.Count == 0)
+            {
+                using var infoFont = new Font("Segoe UI", 10f, FontStyle.Bold);
+                using var infoBrush = new SolidBrush(Color.FromArgb(235, 255, 255, 255));
+                g.DrawString(
+                    "Brak innych plików *.cs w drzewie: " + _hobbyOsRootDir + "\nWrzuć pliki *.cs do folderu HobbyOS i wciśnij F5.",
+                    infoFont, infoBrush, 24, 24);
+            }
+
             using var labelFont = new Font("Segoe UI", 8.5f, FontStyle.Regular);
             using var subFont = new Font("Consolas", 7.2f, FontStyle.Regular);
             using var shadowBrush = new SolidBrush(Color.FromArgb(195, 0, 0, 0));
@@ -973,9 +982,26 @@ namespace HobbyOS.PullPity
         [STAThread]
         public static void Main(string[] args)
         {
-            ApplicationConfiguration.Initialize();
-            string rootArg = (args != null && args.Length > 0) ? args[0] : null;
-            Application.Run(new WinOneShellForm(rootArg));
+            try
+            {
+                ApplicationConfiguration.Initialize();
+                string rootArg = (args != null && args.Length > 0) ? args[0] : null;
+                var form = new WinOneShellForm(rootArg);
+                form.Show();
+                form.Activate();
+                Application.Run(form);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.ToString());
+                try
+                {
+                    MessageBox.Show(ex.ToString(), "WinOneShell — błąd uruchomienia", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                catch
+                {
+                }
+            }
         }
     }
 }
