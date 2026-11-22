@@ -988,9 +988,25 @@ namespace HobbyOS.PullPity
             g.DrawString(label, f, textBrush, new RectangleF(r.X + 10, r.Y, r.Width - 20, r.Height), fmt);
         }
 
+        private static void CleanStaleWinOneShellTemp()
+        {
+            try
+            {
+                string staleDir = Path.Combine(Path.GetTempPath(), "HobbyOSApps", "WinOneShell");
+                if (Directory.Exists(staleDir))
+                {
+                    Directory.Delete(staleDir, true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
         [STAThread]
         public static void Main(string[] args)
         {
+            CleanStaleWinOneShellTemp();
             try
             {
                 ApplicationConfiguration.Initialize();
