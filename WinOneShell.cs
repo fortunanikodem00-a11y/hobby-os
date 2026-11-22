@@ -97,6 +97,7 @@ namespace HobbyOS.PullPity
 
         private readonly string _hobbyOsRootDir;
         private readonly string _currentSourceFile;
+        private readonly bool _initialized;
 
         private int _activeDesktopIndex = 0;
         private ShellIconItem _selectedIcon = null;
@@ -139,12 +140,14 @@ namespace HobbyOS.PullPity
             _currentSourceFile = Path.Combine(_hobbyOsRootDir, "WinOneShell.cs");
 
             Text = "HobbyOS — WinOneShell";
-            MinimumSize = new Size(680, 420);
-            ClientSize = new Size(1240, 740);
             StartPosition = FormStartPosition.CenterScreen;
             ShowInTaskbar = true;
             DoubleBuffered = true;
             KeyPreview = true;
+
+            _initialized = true;
+            MinimumSize = new Size(680, 420);
+            ClientSize = new Size(1240, 740);
 
             ScanHobbyOsTree();
 
@@ -312,15 +315,16 @@ namespace HobbyOS.PullPity
 
         private void RecalculateAllScrollBounds()
         {
-            if (_desktops == null) return;
+            if (!_initialized || _desktops == null) return;
             int workHeight = Math.Max(100, ClientSize.Height - TaskbarHeight);
             for (int d = 0; d < _desktops.Length; d++)
             {
                 var desk = _desktops[d];
-                if (desk == null) continue;
+                if (desk == null || desk.Icons == null) continue;
                 float bottomMost = MarginTop + IconHeight + 40f;
                 foreach (var icon in desk.Icons)
                 {
+                    if (icon == null) continue;
                     float b = icon.Y + icon.Height + 36f;
                     if (b > bottomMost) bottomMost = b;
                 }
@@ -526,6 +530,7 @@ namespace HobbyOS.PullPity
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
+            if (!_initialized) return;
             RecalculateAllScrollBounds();
             Invalidate();
         }
