@@ -130,21 +130,21 @@ namespace HobbyOS.PullPity
 
         public WinOneShellForm(string explicitRootDir)
         {
-            Text = "HobbyOS — WinOneShell";
-            ClientSize = new Size(1240, 740);
-            MinimumSize = new Size(680, 420);
-            StartPosition = FormStartPosition.CenterScreen;
-            ShowInTaskbar = true;
-            DoubleBuffered = true;
-            KeyPreview = true;
-
-            _hobbyOsRootDir = ResolveHobbyOsRootDirectory(explicitRootDir);
-            _currentSourceFile = Path.Combine(_hobbyOsRootDir, "WinOneShell.cs");
-
             _desktops[0] = new VirtualDesktop(0, "Pulpit 1", WallpaperPresets[0].A, WallpaperPresets[0].B);
             _desktops[1] = new VirtualDesktop(1, "Pulpit 2", WallpaperPresets[1].A, WallpaperPresets[1].B);
             _desktops[2] = new VirtualDesktop(2, "Pulpit 3", WallpaperPresets[2].A, WallpaperPresets[2].B);
             _desktops[3] = new VirtualDesktop(3, "Pulpit 4", WallpaperPresets[3].A, WallpaperPresets[3].B);
+
+            _hobbyOsRootDir = ResolveHobbyOsRootDirectory(explicitRootDir);
+            _currentSourceFile = Path.Combine(_hobbyOsRootDir, "WinOneShell.cs");
+
+            Text = "HobbyOS — WinOneShell";
+            MinimumSize = new Size(680, 420);
+            ClientSize = new Size(1240, 740);
+            StartPosition = FormStartPosition.CenterScreen;
+            ShowInTaskbar = true;
+            DoubleBuffered = true;
+            KeyPreview = true;
 
             ScanHobbyOsTree();
 
@@ -233,6 +233,7 @@ namespace HobbyOS.PullPity
         {
             for (int d = 0; d < _desktops.Length; d++)
             {
+                if (_desktops[d] == null) continue;
                 foreach (var old in _desktops[d].Icons)
                 {
                     string key = MakeDesktopKey(d, old.FilePath);
@@ -273,6 +274,7 @@ namespace HobbyOS.PullPity
 
             for (int d = 0; d < _desktops.Length; d++)
             {
+                if (_desktops[d] == null) continue;
                 for (int i = 0; i < foundFiles.Count; i++)
                 {
                     string filePath = foundFiles[i];
@@ -310,10 +312,12 @@ namespace HobbyOS.PullPity
 
         private void RecalculateAllScrollBounds()
         {
+            if (_desktops == null) return;
             int workHeight = Math.Max(100, ClientSize.Height - TaskbarHeight);
             for (int d = 0; d < _desktops.Length; d++)
             {
                 var desk = _desktops[d];
+                if (desk == null) continue;
                 float bottomMost = MarginTop + IconHeight + 40f;
                 foreach (var icon in desk.Icons)
                 {
