@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.IO;
 using System.Windows.Forms;
 
@@ -14,6 +15,7 @@ namespace HobbyOS.PullPity
         public string FileName;
         public string DisplayName;
         public string RelativeFolder;
+        public int DesktopIndex;
         public float X;
         public float Y;
         public float Width;
@@ -21,12 +23,13 @@ namespace HobbyOS.PullPity
         public Color TileColor;
         public string CustomIconPath;
 
-        public ShellIconItem(string filePath, string rootDir, float x, float y, float width, float height, Color tileColor)
+        public ShellIconItem(string filePath, string rootDir, int desktopIndex, float x, float y, float width, float height, Color tileColor)
         {
             FilePath = filePath;
             FileName = Path.GetFileName(filePath);
             DisplayName = Path.GetFileNameWithoutExtension(filePath);
             RelativeFolder = GetRelativeFolder(filePath, rootDir);
+            DesktopIndex = desktopIndex;
             X = x;
             Y = y;
             Width = width;
@@ -66,7 +69,6 @@ namespace HobbyOS.PullPity
         public string WallpaperPath;
         public float ScrollY;
         public float MaxScrollY;
-        public readonly List<ShellIconItem> Icons = new List<ShellIconItem>();
 
         public VirtualDesktop(int index, string name, Color colorA, Color colorB)
         {
@@ -79,16 +81,21 @@ namespace HobbyOS.PullPity
 
     public sealed class WinOneShellForm : Form
     {
+        private const int DesktopCount = 5;
+        private const int MaxIconsPerDesktopAutoSplit = 12;
         private const int TaskbarHeight = 46;
         private const int StartButtonWidth = 104;
-        private const float IconWidth = 104f;
+        private const float IconWidth = 106f;
         private const float IconHeight = 98f;
-        private const float ColSpacing = 120f;
+        private const float ColSpacing = 122f;
         private const float RowSpacing = 114f;
         private const float MarginLeft = 22f;
         private const float MarginTop = 22f;
 
-        private readonly VirtualDesktop[] _desktops = new VirtualDesktop[4];
+        private readonly VirtualDesktop[] _desktops = new VirtualDesktop[DesktopCount];
+        private readonly List<ShellIconItem> _allIcons = new List<ShellIconItem>();
+
+        private readonly Dictionary<string, int> _savedDesktops = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, PointF> _savedPositions = new Dictionary<string, PointF>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Color> _savedTileColors = new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _savedCustomIcons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -97,6 +104,7 @@ namespace HobbyOS.PullPity
 
         private readonly string _hobbyOsRootDir;
         private readonly string _currentSourceFile;
+        private readonly string _stateFilePath;
         private readonly bool _initialized;
 
         private int _activeDesktopIndex = 0;
@@ -115,7 +123,8 @@ namespace HobbyOS.PullPity
             ("Windows Azure", Color.FromArgb(14, 88, 168), Color.FromArgb(30, 148, 214)),
             ("Neon Vice", Color.FromArgb(36, 16, 68), Color.FromArgb(215, 55, 145)),
             ("Emerald Matrix", Color.FromArgb(10, 52, 46), Color.FromArgb(24, 138, 108)),
-            ("Slate Carbon", Color.FromArgb(22, 26, 34), Color.FromArgb(54, 64, 84))
+            ("Slate Carbon", Color.FromArgb(22, 26, 34), Color.FromArgb(54, 64, 84)),
+            ("Sunset Leonida", Color.FromArgb(72, 22, 54), Color.FromArgb(235, 118, 48))
         };
 
         private static readonly Color[] IconColorPresets =
@@ -131,15 +140,17 @@ namespace HobbyOS.PullPity
 
         public WinOneShellForm(string explicitRootDir)
         {
-            _desktops[0] = new VirtualDesktop(0, "Pulpit 1", WallpaperPresets[0].A, WallpaperPresets[0].B);
-            _desktops[1] = new VirtualDesktop(1, "Pulpit 2", WallpaperPresets[1].A, WallpaperPresets[1].B);
-            _desktops[2] = new VirtualDesktop(2, "Pulpit 3", WallpaperPresets[2].A, WallpaperPresets[2].B);
-            _desktops[3] = new VirtualDesktop(3, "Pulpit 4", WallpaperPresets[3].A, WallpaperPresets[3].B);
+            for (int i = 0; i < DesktopCount; i++)
+            {
+                var preset = WallpaperPresets[i % WallpaperPresets.Length];
+                _desktops[i] = new VirtualDesktop(i, "Pulpit " + (i + 1), preset.A, preset.B);
+            }
 
             _hobbyOsRootDir = ResolveHobbyOsRootDirectory(explicitRootDir);
             _currentSourceFile = Path.Combine(_hobbyOsRootDir, "WinOneShell.cs");
+            _stateFilePath = Path.Combine(_hobbyOsRootDir, "winoneshell_state.cfg");
 
-            Text = "HobbyOS — WinOneShell";
+            Text = "HobbyOS — WinOneShell (D1-D5)";
             StartPosition = FormStartPosition.CenterScreen;
             ShowInTaskbar = true;
             DoubleBuffered = true;
@@ -149,6 +160,7 @@ namespace HobbyOS.PullPity
             MinimumSize = new Size(680, 420);
             ClientSize = new Size(1240, 740);
 
+            LoadPersistentState();
             ScanHobbyOsTree();
 
             _clockTimer.Interval = 1000;
@@ -206,9 +218,148 @@ namespace HobbyOS.PullPity
             Invalidate();
         }
 
-        private string MakeDesktopKey(int desktopIdx, string filePath)
+        private string NormalizeKey(string filePath)
         {
-            return desktopIdx + "::" + Path.GetFullPath(filePath);
+            return Path.GetFullPath(filePath);
+        }
+
+        private void LoadPersistentState()
+        {
+            _savedDesktops.Clear();
+            _savedPositions.Clear();
+            _savedTileColors.Clear();
+            _savedCustomIcons.Clear();
+
+            if (!File.Exists(_stateFilePath)) return;
+
+            try
+            {
+                string[] lines = File.ReadAllLines(_stateFilePath);
+                foreach (string rawLine in lines)
+                {
+                    if (string.IsNullOrWhiteSpace(rawLine) || rawLine.StartsWith("#")) continue;
+
+                    if (rawLine.StartsWith("DESKTOP_WALLPAPER|", StringComparison.Ordinal))
+                    {
+                        string[] parts = rawLine.Split('|');
+                        if (parts.Length >= 3 && int.TryParse(parts[1], out int dIdx) && dIdx >= 0 && dIdx < DesktopCount)
+                        {
+                            string wp = parts[2];
+                            if (!string.IsNullOrWhiteSpace(wp) && File.Exists(wp))
+                            {
+                                _desktops[dIdx].WallpaperPath = wp;
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (rawLine.StartsWith("DESKTOP_COLORS|", StringComparison.Ordinal))
+                    {
+                        string[] parts = rawLine.Split('|');
+                        if (parts.Length >= 4 && int.TryParse(parts[1], out int dIdx) && dIdx >= 0 && dIdx < DesktopCount)
+                        {
+                            if (int.TryParse(parts[2], out int argbA) && int.TryParse(parts[3], out int argbB))
+                            {
+                                _desktops[dIdx].ColorA = Color.FromArgb(argbA);
+                                _desktops[dIdx].ColorB = Color.FromArgb(argbB);
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (rawLine.StartsWith("ICON|", StringComparison.Ordinal))
+                    {
+                        string[] parts = rawLine.Split('|');
+                        if (parts.Length >= 6)
+                        {
+                            string path = NormalizeKey(parts[1]);
+                            if (!int.TryParse(parts[2], out int dIdx)) dIdx = 0;
+                            dIdx = Math.Clamp(dIdx, 0, DesktopCount - 1);
+
+                            if (!float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)) x = MarginLeft;
+                            if (!float.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out float y)) y = MarginTop;
+                            if (!int.TryParse(parts[5], out int argb)) argb = IconColorPresets[0].ToArgb();
+
+                            string customIcon = parts.Length >= 7 ? parts[6] : "";
+
+                            _savedDesktops[path] = dIdx;
+                            _savedPositions[path] = new PointF(x, y);
+                            _savedTileColors[path] = Color.FromArgb(argb);
+                            if (!string.IsNullOrWhiteSpace(customIcon))
+                            {
+                                _savedCustomIcons[path] = customIcon;
+                            }
+                            else
+                            {
+                                _savedCustomIcons.Remove(path);
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void SavePersistentState()
+        {
+            try
+            {
+                var lines = new List<string>();
+                lines.Add("# WinOneShell state");
+
+                for (int d = 0; d < DesktopCount; d++)
+                {
+                    var desk = _desktops[d];
+                    lines.Add($"DESKTOP_COLORS|{d}|{desk.ColorA.ToArgb()}|{desk.ColorB.ToArgb()}");
+                    if (!string.IsNullOrWhiteSpace(desk.WallpaperPath))
+                    {
+                        lines.Add($"DESKTOP_WALLPAPER|{d}|{desk.WallpaperPath}");
+                    }
+                }
+
+                foreach (var icon in _allIcons)
+                {
+                    string key = NormalizeKey(icon.FilePath);
+                    _savedDesktops[key] = icon.DesktopIndex;
+                    _savedPositions[key] = new PointF(icon.X, icon.Y);
+                    _savedTileColors[key] = icon.TileColor;
+                    if (!string.IsNullOrWhiteSpace(icon.CustomIconPath))
+                        _savedCustomIcons[key] = icon.CustomIconPath;
+                    else
+                        _savedCustomIcons.Remove(key);
+                }
+
+                foreach (var kv in _savedDesktops)
+                {
+                    string path = kv.Key;
+                    int dIdx = Math.Clamp(kv.Value, 0, DesktopCount - 1);
+                    PointF pos = _savedPositions.TryGetValue(path, out PointF p) ? p : new PointF(MarginLeft, MarginTop);
+                    Color col = _savedTileColors.TryGetValue(path, out Color c) ? c : IconColorPresets[0];
+                    string iconImg = _savedCustomIcons.TryGetValue(path, out string ic) ? ic : "";
+
+                    lines.Add(string.Format(
+                        CultureInfo.InvariantCulture,
+                        "ICON|{0}|{1}|{2}|{3}|{4}|{5}",
+                        path,
+                        dIdx,
+                        pos.X,
+                        pos.Y,
+                        col.ToArgb(),
+                        iconImg));
+                }
+
+                string dir = Path.GetDirectoryName(_stateFilePath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                File.WriteAllLines(_stateFilePath, lines);
+            }
+            catch
+            {
+            }
         }
 
         private static bool IsIgnoredPath(string fullPath, string currentSourcePath)
@@ -234,19 +385,18 @@ namespace HobbyOS.PullPity
 
         private void ScanHobbyOsTree()
         {
-            for (int d = 0; d < _desktops.Length; d++)
+            // Zaktualizuj pamięć z aktualnych ikon
+            foreach (var old in _allIcons)
             {
-                if (_desktops[d] == null) continue;
-                foreach (var old in _desktops[d].Icons)
-                {
-                    string key = MakeDesktopKey(d, old.FilePath);
-                    _savedPositions[key] = new PointF(old.X, old.Y);
-                    _savedTileColors[key] = old.TileColor;
-                    if (!string.IsNullOrWhiteSpace(old.CustomIconPath))
-                        _savedCustomIcons[key] = old.CustomIconPath;
-                }
-                _desktops[d].Icons.Clear();
+                string key = NormalizeKey(old.FilePath);
+                _savedDesktops[key] = old.DesktopIndex;
+                _savedPositions[key] = new PointF(old.X, old.Y);
+                _savedTileColors[key] = old.TileColor;
+                if (!string.IsNullOrWhiteSpace(old.CustomIconPath))
+                    _savedCustomIcons[key] = old.CustomIconPath;
             }
+
+            _allIcons.Clear();
 
             var foundFiles = new List<string>();
             try
@@ -273,61 +423,110 @@ namespace HobbyOS.PullPity
                 return;
             }
 
+            int[] countPerDesktop = new int[DesktopCount];
             int cols = Math.Max(1, (ClientSize.Width - 60) / (int)ColSpacing);
 
-            for (int d = 0; d < _desktops.Length; d++)
+            for (int i = 0; i < foundFiles.Count; i++)
             {
-                if (_desktops[d] == null) continue;
-                for (int i = 0; i < foundFiles.Count; i++)
+                string filePath = foundFiles[i];
+                string key = NormalizeKey(filePath);
+
+                int targetDesktop;
+                if (_savedDesktops.TryGetValue(key, out int savedD))
                 {
-                    string filePath = foundFiles[i];
-                    string key = MakeDesktopKey(d, filePath);
-
-                    float x = MarginLeft + (i % cols) * ColSpacing;
-                    float y = MarginTop + (i / cols) * RowSpacing;
-                    if (_savedPositions.TryGetValue(key, out PointF savedPos))
-                    {
-                        x = savedPos.X;
-                        y = savedPos.Y;
-                    }
-
-                    Color tileColor = IconColorPresets[i % IconColorPresets.Length];
-                    if (_savedTileColors.TryGetValue(key, out Color savedCol))
-                    {
-                        tileColor = savedCol;
-                    }
-
-                    var item = new ShellIconItem(filePath, _hobbyOsRootDir, x, y, IconWidth, IconHeight, tileColor);
-                    if (_savedCustomIcons.TryGetValue(key, out string customIcon))
-                    {
-                        item.CustomIconPath = customIcon;
-                    }
-
-                    _desktops[d].Icons.Add(item);
+                    targetDesktop = Math.Clamp(savedD, 0, DesktopCount - 1);
                 }
+                else
+                {
+                    // Automatyczne rozdzielanie na kolejne pulpity D1..D5, gdy aplikacji jest dużo
+                    targetDesktop = Math.Min(DesktopCount - 1, i / MaxIconsPerDesktopAutoSplit);
+                }
+
+                int slotIndex = countPerDesktop[targetDesktop]++;
+                float x = MarginLeft + (slotIndex % cols) * ColSpacing;
+                float y = MarginTop + (slotIndex / cols) * RowSpacing;
+
+                if (_savedPositions.TryGetValue(key, out PointF savedPos))
+                {
+                    x = savedPos.X;
+                    y = savedPos.Y;
+                }
+
+                Color tileColor = IconColorPresets[i % IconColorPresets.Length];
+                if (_savedTileColors.TryGetValue(key, out Color savedCol))
+                {
+                    tileColor = savedCol;
+                }
+
+                var item = new ShellIconItem(filePath, _hobbyOsRootDir, targetDesktop, x, y, IconWidth, IconHeight, tileColor);
+                if (_savedCustomIcons.TryGetValue(key, out string customIcon))
+                {
+                    item.CustomIconPath = customIcon;
+                }
+
+                _allIcons.Add(item);
             }
 
             _selectedIcon = null;
-            _statusMessage = $"HobbyOS [{_hobbyOsRootDir}]: {foundFiles.Count} plik(ów) *.cs";
+            _statusMessage = $"HobbyOS [{_hobbyOsRootDir}]: {foundFiles.Count} plik(ów) *.cs na pulpitach D1-D5";
             RecalculateAllScrollBounds();
+            SavePersistentState();
+            Invalidate();
+        }
+
+        private List<ShellIconItem> GetIconsOnDesktop(int desktopIdx)
+        {
+            var list = new List<ShellIconItem>();
+            foreach (var icon in _allIcons)
+            {
+                if (icon.DesktopIndex == desktopIdx)
+                {
+                    list.Add(icon);
+                }
+            }
+            return list;
+        }
+
+        private void MoveIconToDesktop(ShellIconItem icon, int targetDesktopIdx)
+        {
+            if (icon == null) return;
+            targetDesktopIdx = Math.Clamp(targetDesktopIdx, 0, DesktopCount - 1);
+            if (icon.DesktopIndex == targetDesktopIdx) return;
+
+            icon.DesktopIndex = targetDesktopIdx;
+            int countOnTarget = GetIconsOnDesktop(targetDesktopIdx).Count;
+            int cols = Math.Max(1, (ClientSize.Width - 60) / (int)ColSpacing);
+            int slot = Math.Max(0, countOnTarget - 1);
+
+            icon.X = MarginLeft + (slot % cols) * ColSpacing;
+            icon.Y = MarginTop + (slot / cols) * RowSpacing;
+
+            _activeDesktopIndex = targetDesktopIdx;
+            _selectedIcon = icon;
+            _statusMessage = $"Przeniesiono '{icon.DisplayName}' na D{targetDesktopIdx + 1}";
+            RecalculateAllScrollBounds();
+            SavePersistentState();
             Invalidate();
         }
 
         private void RecalculateAllScrollBounds()
         {
-            if (!_initialized || _desktops == null) return;
+            if (!_initialized || _desktops == null || _allIcons == null) return;
             int workHeight = Math.Max(100, ClientSize.Height - TaskbarHeight);
-            for (int d = 0; d < _desktops.Length; d++)
+
+            for (int d = 0; d < DesktopCount; d++)
             {
                 var desk = _desktops[d];
-                if (desk == null || desk.Icons == null) continue;
+                if (desk == null) continue;
+
                 float bottomMost = MarginTop + IconHeight + 40f;
-                foreach (var icon in desk.Icons)
+                foreach (var icon in _allIcons)
                 {
-                    if (icon == null) continue;
+                    if (icon == null || icon.DesktopIndex != d) continue;
                     float b = icon.Y + icon.Height + 36f;
                     if (b > bottomMost) bottomMost = b;
                 }
+
                 desk.MaxScrollY = Math.Max(0f, bottomMost - workHeight);
                 desk.ScrollY = Math.Clamp(desk.ScrollY, 0f, desk.MaxScrollY);
             }
@@ -349,6 +548,7 @@ namespace HobbyOS.PullPity
             ActiveDesktop.ColorA = preset.A;
             ActiveDesktop.ColorB = preset.B;
             _statusMessage = $"{ActiveDesktop.Name}: tapeta {preset.Name}";
+            SavePersistentState();
             Invalidate();
         }
 
@@ -366,6 +566,7 @@ namespace HobbyOS.PullPity
                 {
                     ActiveDesktop.WallpaperPath = dlg.FileName;
                     _statusMessage = $"{ActiveDesktop.Name}: tapeta {Path.GetFileName(dlg.FileName)}";
+                    SavePersistentState();
                 }
                 else
                 {
@@ -388,9 +589,8 @@ namespace HobbyOS.PullPity
             Color nextCol = IconColorPresets[_iconColorPresetIndex];
             _selectedIcon.TileColor = nextCol;
             _selectedIcon.CustomIconPath = null;
-            _savedTileColors[MakeDesktopKey(_activeDesktopIndex, _selectedIcon.FilePath)] = nextCol;
-            _savedCustomIcons.Remove(MakeDesktopKey(_activeDesktopIndex, _selectedIcon.FilePath));
             _statusMessage = $"Zmieniono kolor ikony: {_selectedIcon.DisplayName}";
+            SavePersistentState();
             Invalidate();
         }
 
@@ -414,8 +614,8 @@ namespace HobbyOS.PullPity
                 if (GetOrLoadImage(dlg.FileName) != null)
                 {
                     _selectedIcon.CustomIconPath = dlg.FileName;
-                    _savedCustomIcons[MakeDesktopKey(_activeDesktopIndex, _selectedIcon.FilePath)] = dlg.FileName;
                     _statusMessage = $"Ustawiono ikonę dla {_selectedIcon.DisplayName}";
+                    SavePersistentState();
                 }
                 else
                 {
@@ -456,6 +656,8 @@ namespace HobbyOS.PullPity
 
             try
             {
+                SavePersistentState();
+
                 string safeName = SanitizeFolderName(Path.GetFileNameWithoutExtension(icon.FilePath));
                 if (string.IsNullOrWhiteSpace(safeName)) safeName = "HobbyApp";
 
@@ -487,7 +689,7 @@ namespace HobbyOS.PullPity
                 };
 
                 Process.Start(psi);
-                _statusMessage = $"Odpalono: {icon.FileName} (root: {_hobbyOsRootDir})";
+                _statusMessage = $"Odpalono: {icon.FileName}";
             }
             catch (Exception ex)
             {
@@ -514,7 +716,7 @@ namespace HobbyOS.PullPity
 
         private Rectangle GetDesktopSwitcherRect(int idx)
         {
-            int btnW = 42;
+            int btnW = 40;
             int gap = 4;
             int startX = StartButtonWidth + 10 + idx * (btnW + gap);
             return new Rectangle(startX, ClientSize.Height - TaskbarHeight + 8, btnW, TaskbarHeight - 16);
@@ -590,6 +792,34 @@ namespace HobbyOS.PullPity
                 _startMenuOpen = false;
                 Invalidate();
             }
+            else
+            {
+                int dKey = e.KeyCode switch
+                {
+                    Keys.D1 or Keys.NumPad1 => 0,
+                    Keys.D2 or Keys.NumPad2 => 1,
+                    Keys.D3 or Keys.NumPad3 => 2,
+                    Keys.D4 or Keys.NumPad4 => 3,
+                    Keys.D5 or Keys.NumPad5 => 4,
+                    _ => -1
+                };
+
+                if (dKey >= 0 && dKey < DesktopCount)
+                {
+                    if (e.Shift && _selectedIcon != null)
+                    {
+                        MoveIconToDesktop(_selectedIcon, dKey);
+                    }
+                    else
+                    {
+                        _activeDesktopIndex = dKey;
+                        _selectedIcon = null;
+                        _statusMessage = $"Przełączono na {_desktops[dKey].Name}";
+                        Invalidate();
+                    }
+                    e.Handled = true;
+                }
+            }
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
@@ -605,15 +835,22 @@ namespace HobbyOS.PullPity
                 return;
             }
 
-            for (int d = 0; d < _desktops.Length; d++)
+            for (int d = 0; d < DesktopCount; d++)
             {
                 if (GetDesktopSwitcherRect(d).Contains(e.Location))
                 {
-                    _activeDesktopIndex = d;
-                    _selectedIcon = null;
-                    _startMenuOpen = false;
-                    _statusMessage = $"Przełączono na {_desktops[d].Name}";
-                    Invalidate();
+                    if (_selectedIcon != null && _selectedIcon.DesktopIndex != d)
+                    {
+                        MoveIconToDesktop(_selectedIcon, d);
+                    }
+                    else
+                    {
+                        _activeDesktopIndex = d;
+                        _selectedIcon = null;
+                        _startMenuOpen = false;
+                        _statusMessage = $"Przełączono na {_desktops[d].Name}";
+                        Invalidate();
+                    }
                     return;
                 }
             }
@@ -635,15 +872,16 @@ namespace HobbyOS.PullPity
             int workBottom = ClientSize.Height - TaskbarHeight;
             if (e.Y < workBottom)
             {
-                var icons = ActiveDesktop.Icons;
                 float scrollY = ActiveDesktop.ScrollY;
-
                 ShellIconItem hit = null;
-                for (int i = icons.Count - 1; i >= 0; i--)
+
+                for (int i = _allIcons.Count - 1; i >= 0; i--)
                 {
-                    if (icons[i].GetScreenBounds(scrollY).Contains(e.Location))
+                    var icon = _allIcons[i];
+                    if (icon.DesktopIndex != _activeDesktopIndex) continue;
+                    if (icon.GetScreenBounds(scrollY).Contains(e.Location))
                     {
-                        hit = icons[i];
+                        hit = icon;
                         break;
                     }
                 }
@@ -651,8 +889,8 @@ namespace HobbyOS.PullPity
                 _selectedIcon = hit;
                 if (hit != null)
                 {
-                    icons.Remove(hit);
-                    icons.Add(hit);
+                    _allIcons.Remove(hit);
+                    _allIcons.Add(hit);
 
                     _draggingIcon = hit;
                     _isDragging = true;
@@ -697,6 +935,7 @@ namespace HobbyOS.PullPity
             }
             else if (new Rectangle(x, y0 + step * 5, w, 28).Contains(pt))
             {
+                SavePersistentState();
                 Close();
             }
         }
@@ -716,7 +955,6 @@ namespace HobbyOS.PullPity
 
                 _draggingIcon.X = newX;
                 _draggingIcon.Y = newY;
-                _savedPositions[MakeDesktopKey(_activeDesktopIndex, _draggingIcon.FilePath)] = new PointF(newX, newY);
 
                 RecalculateAllScrollBounds();
                 Invalidate();
@@ -728,6 +966,24 @@ namespace HobbyOS.PullPity
             base.OnMouseUp(e);
             if (e.Button == MouseButtons.Left)
             {
+                if (_isDragging && _draggingIcon != null)
+                {
+                    // Sprawdź, czy upuszczono ikonę na przycisk pulpitu D1..D5 na pasku zadań
+                    for (int d = 0; d < DesktopCount; d++)
+                    {
+                        if (GetDesktopSwitcherRect(d).Contains(e.Location))
+                        {
+                            var targetIcon = _draggingIcon;
+                            _isDragging = false;
+                            _draggingIcon = null;
+                            MoveIconToDesktop(targetIcon, d);
+                            return;
+                        }
+                    }
+
+                    SavePersistentState();
+                }
+
                 _isDragging = false;
                 _draggingIcon = null;
             }
@@ -741,15 +997,16 @@ namespace HobbyOS.PullPity
             int workBottom = ClientSize.Height - TaskbarHeight;
             if (e.Y >= workBottom) return;
 
-            var icons = ActiveDesktop.Icons;
             float scrollY = ActiveDesktop.ScrollY;
 
-            for (int i = icons.Count - 1; i >= 0; i--)
+            for (int i = _allIcons.Count - 1; i >= 0; i--)
             {
-                if (icons[i].GetScreenBounds(scrollY).Contains(e.Location))
+                var icon = _allIcons[i];
+                if (icon.DesktopIndex != _activeDesktopIndex) continue;
+                if (icon.GetScreenBounds(scrollY).Contains(e.Location))
                 {
-                    _selectedIcon = icons[i];
-                    LaunchIconScript(icons[i]);
+                    _selectedIcon = icon;
+                    LaunchIconScript(icon);
                     return;
                 }
             }
@@ -757,6 +1014,7 @@ namespace HobbyOS.PullPity
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            SavePersistentState();
             _clockTimer.Stop();
             _clockTimer.Dispose();
             foreach (var img in _imageCache.Values)
@@ -802,12 +1060,13 @@ namespace HobbyOS.PullPity
             var prevClip = g.ClipBounds;
             g.SetClip(new Rectangle(0, 0, ClientSize.Width, workH));
 
-            if (desk.Icons.Count == 0)
+            var visibleIcons = GetIconsOnDesktop(_activeDesktopIndex);
+            if (visibleIcons.Count == 0)
             {
                 using var infoFont = new Font("Segoe UI", 10f, FontStyle.Bold);
                 using var infoBrush = new SolidBrush(Color.FromArgb(235, 255, 255, 255));
                 g.DrawString(
-                    "Brak innych plików *.cs w drzewie: " + _hobbyOsRootDir + "\nWrzuć pliki *.cs do folderu HobbyOS i wciśnij F5.",
+                    desk.Name + " jest pusty.\nPrzeciągnij aplikację na przycisk D" + (_activeDesktopIndex + 1) + " lub wciśnij F5 aby przeskanować HobbyOS.",
                     infoFont, infoBrush, 24, 24);
             }
 
@@ -817,8 +1076,10 @@ namespace HobbyOS.PullPity
             using var textBrush = new SolidBrush(Color.White);
             using var subBrush = new SolidBrush(Color.FromArgb(220, 210, 235, 255));
 
-            foreach (var icon in desk.Icons)
+            foreach (var icon in _allIcons)
             {
+                if (icon.DesktopIndex != _activeDesktopIndex) continue;
+
                 RectangleF rect = icon.GetScreenBounds(desk.ScrollY);
                 if (rect.Bottom < -20 || rect.Top > workH + 20) continue;
 
@@ -921,12 +1182,16 @@ namespace HobbyOS.PullPity
             }
 
             using var dFont = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-            for (int d = 0; d < _desktops.Length; d++)
+            for (int d = 0; d < DesktopCount; d++)
             {
                 Rectangle dr = GetDesktopSwitcherRect(d);
                 bool active = d == _activeDesktopIndex;
-                using var dBg = new SolidBrush(active ? Color.FromArgb(42, 145, 225) : Color.FromArgb(85, 58, 72, 92));
-                using var dBorder = new Pen(active ? Color.White : Color.FromArgb(110, 150, 180, 210), 1f);
+                bool dropTarget = _isDragging && _draggingIcon != null && _draggingIcon.DesktopIndex != d;
+
+                using var dBg = new SolidBrush(active
+                    ? Color.FromArgb(42, 145, 225)
+                    : (dropTarget ? Color.FromArgb(185, 85, 165, 60) : Color.FromArgb(85, 58, 72, 92)));
+                using var dBorder = new Pen(active || dropTarget ? Color.White : Color.FromArgb(110, 150, 180, 210), 1.2f);
                 using var dText = new SolidBrush(Color.White);
 
                 g.FillRectangle(dBg, dr);
@@ -941,7 +1206,7 @@ namespace HobbyOS.PullPity
             var clockFmt = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
             g.DrawString(clockText, clockFont, clockBrush, new RectangleF(ClientSize.Width - 105f, tbY, 96f, TaskbarHeight), clockFmt);
 
-            int switcherEndX = StartButtonWidth + 10 + _desktops.Length * 46 + 10;
+            int switcherEndX = StartButtonWidth + 10 + DesktopCount * 44 + 10;
             using var statusFont = new Font("Segoe UI", 8.5f, FontStyle.Regular);
             using var statusBrush = new SolidBrush(Color.FromArgb(215, 228, 242));
             var statusFmt = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
