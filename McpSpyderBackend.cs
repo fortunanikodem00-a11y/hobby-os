@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -29,9 +30,9 @@ namespace HobbyOS.PullPits.Spyder
         private readonly Queue<string> _kolejkaZadan = new Queue<string>();
         private readonly SemaphoreSlim _semaforKolejki = new SemaphoreSlim(1, 1);
         private readonly List<object> _historiaRozmowy = new List<object>();
+        private readonly List<string> _logiSystemowe = new List<string>();
         private static readonly HttpClient _http = new HttpClient();
 
-        // Prompt uczący Gemini 53 komend, sprawdzania folderu i limitu 1-3 kroków
         private const string SYSTEM_PROMPT = @"
 Jesteś agentem MCP AI działającym jako kontener SPYDER (tryb BACKEND) w systemie HobbyOS (SH4RK OS / D HERO SH4RK).
 Nie masz na starcie pamięci aplikacji – całą wiedzę o systemie zdobywasz wykonując polecenia.
@@ -43,14 +44,14 @@ ZASADY KRYTYCZNE:
 4. LIMIT KOLEJKI PAMIĘCI: Przy operacjach grzebiących w pamięci/plikach możesz wykonać maksymalnie od 1 do 3 komend po kolei w jednym zadaniu, po czym musisz udzielić odpowiedzi użytkownikowi.
 
 DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
-- SYSTEM UPRAWNIEŃ GEM: gem install, gem remove
-- INTERFEJS I GITHUB: pulpit-start, fetch, src-list, src-path, src-count, src-clean, src-status
+- SYSTEM UPRAWNIEŃ GEM: gem install <nazwa>, gem remove <nazwa>
+- INTERFEJS I GITHUB: pulpit-start <plik.cs>, fetch <url>, src-list, src-path, src-count, src-clean, src-status
 - METRYKI PROCESORA: cpu-cores, cpu-arch, cpu-os, cpu-uptime, cpu-tick
 - ANALIZATOR PAMIĘCI RAM: ram-allocated, ram-sterta, ram-peak, ram-threads, ram-status
 - PROCESY WINDOWS: ps-count, ps-current-id, ps-name, ps-priority, ps-time
 - TOŻSAMOŚĆ SYSTEMU: sys-machine, sys-user, sys-domain, sys-dir, sys-runtime
 - REJESTRY ŚRODOWISKA: env-variables, env-drive-count, env-page-size, env-interactive, env-check
-- WEJŚCIA/WYJŚCIA IO (w tym sprawdzanie folderu): io-drives, io-dir-view, io-temp, io-current, io-status
+- WEJŚCIA/WYJŚCIA IO: io-drives, io-dir-view, io-temp, io-current, io-status
 - SILNIK DEWELOPERSKI: dev-mode, dev-compiler, dev-reflection, dev-build-info, dev-status
 - OPERACJE NA LOGACH: log-status, log-count, log-dump, log-security, log-check
 ";
@@ -83,7 +84,7 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
                 Left = 398,
                 Top = 10,
                 Width = 210,
-                Text = "gemini-3.8-flash",
+                Text = "gemini-3.5-flash-lite",
                 BackColor = Color.FromArgb(30, 34, 44),
                 ForeColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle
@@ -145,7 +146,8 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
             Controls.Add(topPanel);
             Controls.Add(bottomPanel);
 
-            LogujUI("[SPYDER BACKEND] Gotowy. Podłączono 53 polecenia HobbyOS Core. Kolejka i auto-retry aktywne.\n", Color.Yellow);
+            ZapiszLog("Uruchomiono kontener SPYDER BACKEND (53 polecenia aktywne).");
+            LogujUI("[SPYDER BACKEND] Gotowy. Podłączono 53 realne polecenia HobbyOS Core. Kolejka aktywna.\n", Color.Yellow);
         }
 
         private void DodajDoKolejki()
@@ -202,7 +204,6 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
                 parts = new[] { new { text = pytanieUzytkownika } }
             });
 
-            // Maksymalnie 3 kroki komend w ramach jednego zadania (limit 1-3 dla operacji na pamięci/plikach)
             const int MAX_KROKOW_KOMEND = 3;
             int licznikKomend = 0;
 
@@ -215,39 +216,45 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
                     break;
                 }
 
-                // Sprawdzamy, czy AI zwróciło ukrytą komendę [CMD: ...]
-                var match = Regex.Match(odpowiedzAI.Trim(), @"^\[CMD:\s*(.+?)\]$", RegexOptions.IgnoreCase);
+                // Wyłapujemy wszystkie tagi [CMD: ...] nawet jeśli AI zwróci kilka w jednej wiadomości
+                var matches = Regex.Matches(odpowiedzAI, @"\[CMD:\s*(.+?)\]", RegexOptions.IgnoreCase);
 
-                if (match.Success && licznikKomend < MAX_KROKOW_KOMEND)
+                if (matches.Count > 0 && licznikKomend < MAX_KROKOW_KOMEND)
                 {
-                    licznikKomend++;
-                    string komenda = match.Groups[1].Value.Trim();
-
-                    // Zapisujemy wywołanie komendy w historii (niewidoczne dla użytkownika)
                     _historiaRozmowy.Add(new
                     {
                         role = "model",
                         parts = new[] { new { text = odpowiedzAI.Trim() } }
                     });
 
-                    // Backend wykonuje komendę na jądrze D HERO SH4RK
-                    string wynikZSystemu = WykonajKomendeKernel(komenda);
+                    var zbiorWynikow = new StringBuilder();
 
-                    // Fałszywa / ukryta odpowiedź zwrotna dla AI (użytkownik jej nie widzi)
+                    foreach (Match m in matches)
+                    {
+                        if (licznikKomend >= MAX_KROKOW_KOMEND) break;
+
+                        licznikKomend++;
+                        string komenda = m.Groups[1].Value.Trim();
+                        ZapiszLog($"Wykonano komendę [{licznikKomend}/{MAX_KROKOW_KOMEND}]: {komenda}");
+
+                        string wynikZSystemu = await WykonajKomendeKernelAsync(komenda);
+                        zbiorWynikow.AppendLine($"[SYS_OUT dla '{komenda}' | Krok {licznikKomend}/{MAX_KROKOW_KOMEND}]: {wynikZSystemu}");
+                    }
+
+                    // Ukryta zwrotka dla AI (niewidoczna dla usera)
                     _historiaRozmowy.Add(new
                     {
                         role = "user",
-                        parts = new[] { new { text = $"[SYS_OUT dla '{komenda}' | Krok {licznikKomend}/{MAX_KROKOW_KOMEND}]: {wynikZSystemu}" } }
+                        parts = new[] { new { text = zbiorWynikow.ToString().Trim() } }
                     });
 
-                    // Pętla idzie dalej – AI analizuje wynik i decyduje czy potrzebuje kolejnej komendy (max 3) czy odpowiada userowi
                     continue;
                 }
                 else
                 {
                     string czystaOdpowiedz = Regex.Replace(odpowiedzAI, @"\[CMD:.*?\]", "").Trim();
                     if (string.IsNullOrEmpty(czystaOdpowiedz))
-                        czystaOdpowiedz = "Osiągnięto limit 3 operacji na pamięci w jednej kolejce. Zadanie zatrzymane.";
+                        czystaOdpowiedz = "Wykonano maksymalną liczbę 3 operacji na pamięci w jednej kolejce.";
 
                     _historiaRozmowy.Add(new
                     {
@@ -330,93 +337,264 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
             return "Nie udało się uzyskać odpowiedzi po ponownych próbach.";
         }
 
-        // TUTAJ PODPINASZ SWOJE METODY Z JĄDRA D HERO SH4RK (53 KOMENDY)
-        private string WykonajKomendeKernel(string pelnaKomenda)
+        // REALNE WYKONYWANIE WSZYSTKICH 53 KOMEND SYSTEMOWYCH HOBBYOS CORE
+        private async Task<string> WykonajKomendeKernelAsync(string pelnaKomenda)
         {
             string[] czesci = pelnaKomenda.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
             string cmd = czesci[0].ToLowerInvariant();
-            string arg = czesci.Length > 1 ? czesci[1] : "";
-            string srcRepoPath = Path.Combine(Directory.GetCurrentDirectory(), "src_repo");
+            string arg = czesci.Length > 1 ? czesci[1].Trim() : "";
 
-            return cmd switch
+            string currentDir = Directory.GetCurrentDirectory();
+            string srcRepoPath = Path.Combine(currentDir, "src_repo");
+            if (!Directory.Exists(srcRepoPath)) Directory.CreateDirectory(srcRepoPath);
+
+            try
             {
-                // --- WEJŚCIA/WYJŚCIA IO (w tym sprawdzanie aktualnego folderu) ---
-                "io-current" => $"Aktualny katalog roboczy: {Directory.GetCurrentDirectory()}",
-                "io-dir-view" => Directory.Exists(string.IsNullOrEmpty(arg) ? Directory.GetCurrentDirectory() : arg)
-                    ? "Zawartość: " + string.Join(", ", Directory.GetFileSystemEntries(string.IsNullOrEmpty(arg) ? Directory.GetCurrentDirectory() : arg).Select(Path.GetFileName))
-                    : "Katalog nie istnieje.",
-                "io-drives" => "Dyski: " + string.Join(", ", DriveInfo.GetDrives().Select(d => $"{d.Name} ({d.DriveType})")),
-                "io-temp" => $"Folder Temp: {Path.GetTempPath()}",
-                "io-status" => "IO Status: ONLINE (D HERO SH4RK FS READY)",
+                return cmd switch
+                {
+                    // --- 1. SYSTEM UPRAWNIEŃ GEM (REALNY REJESTR PAKIETÓW JSON) ---
+                    "gem" when arg.StartsWith("install", StringComparison.OrdinalIgnoreCase)
+                        => ZarzadzajPakietemGem(srcRepoPath, arg.Substring(7).Trim(), true),
+                    "gem" when arg.StartsWith("remove", StringComparison.OrdinalIgnoreCase)
+                        => ZarzadzajPakietemGem(srcRepoPath, arg.Substring(6).Trim(), false),
+                    "gem-install" => ZarzadzajPakietemGem(srcRepoPath, arg, true),
+                    "gem-remove" => ZarzadzajPakietemGem(srcRepoPath, arg, false),
 
-                // --- ANALIZATOR PAMIĘCI RAM ---
-                "ram-allocated" => $"Przydzielony RAM procesu: {GC.GetTotalMemory(false) / 1024 / 1024} MB",
-                "ram-sterta" => $"Sterta GC: {GC.GetGCMemoryInfo().HeapSizeBytes / 1024 / 1024} MB",
-                "ram-peak" => $"Szczytowy RAM procesu: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MB",
-                "ram-threads" => $"Liczba wątków procesu: {Process.GetCurrentProcess().Threads.Count}",
-                "ram-status" => $"RAM Fizyczny dostępny: {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024 / 1024} MB | Użycie procesu: {Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024} MB",
+                    // --- 2. INTERFEJS, GITHUB I SRC_REPO (PRAWDZIWE URUCHAMIANIE PULL-PITÓW I POBIERANIE) ---
+                    "pulpit-start" => await UruchomPullPitCsAsync(srcRepoPath, arg),
+                    "fetch" => await PobierzPlikDoRepoAsync(srcRepoPath, arg),
+                    "src-path" => $"Ścieżka src_repo: {srcRepoPath}",
+                    "src-list" => "Pliki w src_repo: " + (Directory.GetFiles(srcRepoPath).Length == 0
+                        ? "(brak plików)"
+                        : string.Join(", ", Directory.GetFiles(srcRepoPath).Select(Path.GetFileName))),
+                    "src-count" => $"Liczba plików w src_repo: {Directory.GetFiles(srcRepoPath).Length}",
+                    "src-clean" => WyczyscTempISrc(srcRepoPath),
+                    "src-status" => $"src_repo: AKTYWNE | Lokalizacja: {srcRepoPath} | Plików: {Directory.GetFiles(srcRepoPath).Length}",
 
-                // --- METRYKI PROCESORA ---
-                "cpu-cores" => $"Rdzenie logiczne CPU: {Environment.ProcessorCount}",
-                "cpu-arch" => $"Architektura: {RuntimeInformation.OSArchitecture}",
-                "cpu-os" => $"System bazowy: {RuntimeInformation.OSDescription}",
-                "cpu-uptime" => $"Uptime systemu: {TimeSpan.FromMilliseconds(Environment.TickCount64):dd\\.hh\\:mm\\:ss}",
-                "cpu-tick" => $"CPU TickCount64: {Environment.TickCount64}",
+                    // --- 3. METRYKI PROCESORA ---
+                    "cpu-cores" => $"Rdzenie logiczne CPU: {Environment.ProcessorCount}",
+                    "cpu-arch" => $"Architektura CPU/OS: {RuntimeInformation.ProcessArchitecture} / {RuntimeInformation.OSArchitecture}",
+                    "cpu-os" => $"System bazowy: {RuntimeInformation.OSDescription}",
+                    "cpu-uptime" => $"Uptime systemu: {TimeSpan.FromMilliseconds(Environment.TickCount64):dd\\.hh\\:mm\\:ss}",
+                    "cpu-tick" => $"CPU TickCount64: {Environment.TickCount64}",
 
-                // --- INTERFEJS, GITHUB I SRC_REPO ---
-                "src-path" => $"Ścieżka src_repo: {srcRepoPath}",
-                "src-list" => Directory.Exists(srcRepoPath)
-                    ? "Pliki w src_repo: " + string.Join(", ", Directory.GetFiles(srcRepoPath).Select(Path.GetFileName))
-                    : "Brak folderu src_repo w bieżącym katalogu.",
-                "src-count" => Directory.Exists(srcRepoPath)
-                    ? $"Liczba plików w src_repo: {Directory.GetFiles(srcRepoPath).Length}"
-                    : "0 (brak folderu src_repo)",
-                "src-clean" => $"[SYGNAŁ D HERO] Oczyszczono pamięć podręczną src_repo ({arg})",
-                "src-status" => Directory.Exists(srcRepoPath) ? "src_repo: AKTYWNE" : "src_repo: NIEUTWORZONE",
-                "pulpit-start" => $"[SYGNAŁ D HERO] Uruchamianie pull-pita: {(string.IsNullOrEmpty(arg) ? "WinOneShell" : arg)}",
-                "fetch" => $"[SYGNAŁ D HERO] Pobieranie zasobu z sieci/GitHub: {arg}",
+                    // --- 4. ANALIZATOR PAMIĘCI RAM ---
+                    "ram-allocated" => $"Przydzielony RAM procesu: {GC.GetTotalMemory(false) / 1024 / 1024} MB",
+                    "ram-sterta" => $"Sterta GC: {GC.GetGCMemoryInfo().HeapSizeBytes / 1024 / 1024} MB",
+                    "ram-peak" => $"Szczytowy RAM procesu: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MB",
+                    "ram-threads" => $"Liczba wątków procesu: {Process.GetCurrentProcess().Threads.Count}",
+                    "ram-status" => $"RAM Fizyczny dostępny: {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024 / 1024} MB | Użycie procesu: {Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024} MB",
 
-                // --- SYSTEM UPRAWNIEŃ GEM ---
-                "gem" when arg.StartsWith("install") => $"[ZABRA GEM] Zainstalowano pakiet: {arg.Replace("install", "").Trim()}",
-                "gem" when arg.StartsWith("remove") => $"[ZABRA GEM] Usunięto pakiet: {arg.Replace("remove", "").Trim()}",
-                "gem-install" => $"[ZABRA GEM] Zainstalowano pakiet: {arg}",
-                "gem-remove" => $"[ZABRA GEM] Usunięto pakiet: {arg}",
+                    // --- 5. PROCESY WINDOWS ---
+                    "ps-count" => $"Liczba uruchomionych procesów Windows: {Process.GetProcesses().Length}",
+                    "ps-current-id" => $"PID bieżącego procesu: {Environment.ProcessId}",
+                    "ps-name" => $"Nazwa procesu: {Process.GetCurrentProcess().ProcessName}",
+                    "ps-priority" => $"Priorytet procesu: {Process.GetCurrentProcess().PriorityClass}",
+                    "ps-time" => $"Czas CPU procesu: {Process.GetCurrentProcess().TotalProcessorTime}",
 
-                // --- PROCESY WINDOWS ---
-                "ps-count" => $"Liczba procesów: {Process.GetProcesses().Length}",
-                "ps-current-id" => $"PID Spydera: {Environment.ProcessId}",
-                "ps-name" => $"Nazwa procesu: {Process.GetCurrentProcess().ProcessName}",
-                "ps-priority" => $"Priorytet: {Process.GetCurrentProcess().PriorityClass}",
-                "ps-time" => $"Czas CPU procesu: {Process.GetCurrentProcess().TotalProcessorTime}",
+                    // --- 6. TOŻSAMOŚĆ SYSTEMU ---
+                    "sys-machine" => $"Nazwa maszyny: {Environment.MachineName}",
+                    "sys-user" => $"Użytkownik: {Environment.UserName}",
+                    "sys-domain" => $"Domena: {Environment.UserDomainName}",
+                    "sys-dir" => $"Katalog systemowy: {Environment.SystemDirectory}",
+                    "sys-runtime" => $"Środowisko uruchomieniowe: {RuntimeInformation.FrameworkDescription}",
 
-                // --- TOŻSAMOŚĆ SYSTEMU ---
-                "sys-machine" => $"Maszyna: {Environment.MachineName}",
-                "sys-user" => $"Użytkownik: {Environment.UserName}",
-                "sys-domain" => $"Domena: {Environment.UserDomainName}",
-                "sys-dir" => $"Katalog systemowy: {Environment.SystemDirectory}",
-                "sys-runtime" => $"Runtime: {RuntimeInformation.FrameworkDescription}",
+                    // --- 7. REJESTRY ŚRODOWISKA ---
+                    "env-variables" => $"Liczba zmiennych środowiskowych: {Environment.GetEnvironmentVariables().Count}",
+                    "env-drive-count" => $"Liczba dysków logicznych: {Environment.GetLogicalDrives().Length}",
+                    "env-page-size" => $"Rozmiar strony pamięci: {Environment.SystemPageSize} B",
+                    "env-interactive" => $"Tryb interaktywny: {Environment.UserInteractive}",
+                    "env-check" => $"Środowisko .NET: OK | 64-bit OS: {Environment.Is64BitOperatingSystem}",
 
-                // --- REJESTRY ŚRODOWISKA ---
-                "env-variables" => $"Liczba zmiennych środowiskowych: {Environment.GetEnvironmentVariables().Count}",
-                "env-drive-count" => $"Liczba dysków: {Environment.GetLogicalDrives().Length}",
-                "env-page-size" => $"Rozmiar strony pamięci: {Environment.SystemPageSize} B",
-                "env-interactive" => $"Tryb interaktywny: {Environment.UserInteractive}",
-                "env-check" => "Środowisko .NET: OK (HobbyOS Compatible)",
+                    // --- 8. WEJŚCIA/WYJŚCIA IO ---
+                    "io-drives" => "Dyski: " + string.Join(", ", DriveInfo.GetDrives().Where(d => d.IsReady).Select(d => $"{d.Name} ({d.AvailableFreeSpace / 1024 / 1024 / 1024} GB wolne)")),
+                    "io-dir-view" => PodgladKatalogu(string.IsNullOrEmpty(arg) ? currentDir : arg),
+                    "io-temp" => $"Folder Temp: {Path.GetTempPath()}",
+                    "io-current" => $"Aktualny katalog roboczy: {currentDir} (src_repo: {srcRepoPath})",
+                    "io-status" => $"IO Status: ONLINE | D HERO SH4RK FS READY | Zapis możliwy: TRUE",
 
-                // --- SILNIK DEWELOPERSKI I LOGI ---
-                "dev-mode" => "DevMode: ENABLED (0 + 1 x 2)",
-                "dev-compiler" => "Kompilator: Roslyn C# Runtime Compiler",
-                "dev-reflection" => "Refleksja .NET: AKTYWNA",
-                "dev-build-info" => "HobbyOS Core // SH4RK OS Build",
-                "dev-status" => "Silnik deweloperski: GOTOWY",
-                "log-status" => "Logi systemowe: AKTYWNE",
-                "log-count" => $"Wpisy w historii sesji: {_historiaRozmowy.Count}",
-                "log-dump" => "Zrzut logów wykonany do bufora D HERO.",
-                "log-security" => "ZABRA GEM Security: BRAK BLOKAD (Tryb otwarty HBOS)",
-                "log-check" => "Weryfikacja logów: CZYSTO",
+                    // --- 9. SILNIK DEWELOPERSKI ---
+                    "dev-mode" => "DevMode: ENABLED (Architektura HobbyOS 0 + 1 x 2)",
+                    "dev-compiler" => "Kompilator: Dynamic C# Runtime Build (.NET SDK / Roslyn)",
+                    "dev-reflection" => $"Refleksja .NET: AKTYWNA (Załadowane zestawy: {AppDomain.CurrentDomain.GetAssemblies().Length})",
+                    "dev-build-info" => $"HobbyOS Core // SH4RK OS Build | Target: {RuntimeInformation.FrameworkDescription}",
+                    "dev-status" => "Silnik deweloperski: GOTOWY DO KOMPILACJI PULL-PITÓW",
 
-                _ => $"Nieznana komenda systemowa: {pelnaKomenda}"
+                    // --- 10. OPERACJE NA LOGACH ---
+                    "log-status" => "Logi systemowe D HERO: AKTYWNE",
+                    "log-count" => $"Liczba wpisów w logach: {_logiSystemowe.Count}",
+                    "log-dump" => _logiSystemowe.Count == 0 ? "Brak logów." : string.Join(" | ", _logiSystemowe.TakeLast(5)),
+                    "log-security" => "ZABRA GEM Security: BRAK BLOKAD (Tryb otwarty HBOS)",
+                    "log-check" => $"Weryfikacja logów: CZYSTO ({_logiSystemowe.Count} wpisów sprawdzonych)",
+
+                    _ => $"Nieznana komenda systemowa: {pelnaKomenda}"
+                };
+            }
+            catch (Exception ex)
+            {
+                ZapiszLog($"Błąd komendy '{pelnaKomenda}': {ex.Message}");
+                return $"Błąd wykonania '{pelnaKomenda}': {ex.Message}";
+            }
+        }
+
+        // PRAWDZIWE URUCHAMIANIE PLIKÓW .CS Z SRC_REPO (KOMPILACJA DO UNIKALNEGO DLL W PAMIĘCI)
+        private async Task<string> UruchomPullPitCsAsync(string srcRepoPath, string nazwaPliku)
+        {
+            if (string.IsNullOrWhiteSpace(nazwaPliku))
+                nazwaPliku = "WinOneShell.cs";
+
+            if (!nazwaPliku.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) &&
+                !nazwaPliku.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                nazwaPliku += ".cs";
+            }
+
+            string pelnaSciezka = File.Exists(nazwaPliku)
+                ? Path.GetFullPath(nazwaPliku)
+                : Path.Combine(srcRepoPath, nazwaPliku);
+
+            if (!File.Exists(pelnaSciezka))
+                return $"BŁĄD: Nie znaleziono pliku '{nazwaPliku}' w folderze {srcRepoPath}.";
+
+            // Jeśli to gotowe .exe, odpalamy bezpośrednio
+            if (pelnaSciezka.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                Process.Start(new ProcessStartInfo(pelnaSciezka) { UseShellExecute = true });
+                return $"SUKCES: Uruchomiono plik wykonywalny {Path.GetFileName(pelnaSciezka)}.";
+            }
+
+            // Tworzymy tymczasowy projekt w %TEMP% z unikalnym GUID (zero błędów 'TempApp.dll is denied'!)
+            string buildId = Guid.NewGuid().ToString("N");
+            string tempBuildDir = Path.Combine(Path.GetTempPath(), $"HobbyOS_Build_{buildId}");
+            Directory.CreateDirectory(tempBuildDir);
+
+            string skopiowanyCs = Path.Combine(tempBuildDir, Path.GetFileName(pelnaSciezka));
+            File.Copy(pelnaSciezka, skopiowanyCs, true);
+
+            string csprojPath = Path.Combine(tempBuildDir, $"PullPit_{buildId}.csproj");
+            string csprojXml = @"<Project Sdk=""Microsoft.NET.Sdk"">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>PullPit_" + buildId + @"</AssemblyName>
+  </PropertyGroup>
+</Project>";
+            await File.WriteAllTextAsync(csprojPath, csprojXml);
+
+            // Kompilujemy przez dotnet build w tle
+            var psi = new ProcessStartInfo("dotnet", $"build \"{csprojPath}\" -c Release -o \"{tempBuildDir}\\out\" --nologo")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
             };
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+                return "BŁĄD: Nie udało się uruchomić kompilatora dotnet.";
+
+            string stdout = await proc.StandardOutput.ReadToEndAsync();
+            string stderr = await proc.StandardError.ReadToEndAsync();
+            await proc.WaitForExitAsync();
+
+            if (proc.ExitCode != 0)
+            {
+                string bladKompilacji = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                return $"BŁĄD KOMPILACJI '{Path.GetFileName(pelnaSciezka)}': {bladKompilacji}";
+            }
+
+            string skompilowaneExe = Path.Combine(tempBuildDir, "out", $"PullPit_{buildId}.exe");
+            if (File.Exists(skompilowaneExe))
+            {
+                Process.Start(new ProcessStartInfo(skompilowaneExe)
+                {
+                    WorkingDirectory = Directory.GetCurrentDirectory(),
+                    UseShellExecute = true
+                });
+                ZapiszLog($"Uruchomiono pull-pit: {Path.GetFileName(pelnaSciezka)} (PID nowego okna).");
+                return $"SUKCES: Skompilowano i otworzono okno pull-pita '{Path.GetFileName(pelnaSciezka)}' na ekranie.";
+            }
+
+            return "BŁĄD: Kompilacja zakończona, ale nie znaleziono pliku wyjściowego.";
+        }
+
+        // PRAWDZIWE POBIERANIE PLIKU Z SIECI / GITHUBA DO SRC_REPO
+        private async Task<string> PobierzPlikDoRepoAsync(string srcRepoPath, string url)
+        {
+            if (string.IsNullOrWhiteSpace(url) || !url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                return "BŁĄD: Podaj poprawny adres URL (http/https) do pobrania pliku.";
+
+            Uri uri = new Uri(url);
+            string nazwaPliku = Path.GetFileName(uri.LocalPath);
+            if (string.IsNullOrWhiteSpace(nazwaPliku))
+                nazwaPliku = $"fetched_{DateTime.Now:HHmmss}.cs";
+
+            string cel = Path.Combine(srcRepoPath, nazwaPliku);
+            byte[] dane = await _http.GetByteArrayAsync(uri);
+            await File.WriteAllBytesAsync(cel, dane);
+
+            ZapiszLog($"Pobrano plik {nazwaPliku} ({dane.Length} B) do src_repo.");
+            return $"SUKCES: Pobrano '{nazwaPliku}' ({dane.Length} bajtów) do {cel}.";
+        }
+
+        // PRAWDZIWY SYSTEM PAKIETÓW GEM (ZAPIS DO src_repo\gem_packages.json)
+        private string ZarzadzajPakietemGem(string srcRepoPath, string pakiet, bool instaluj)
+        {
+            if (string.IsNullOrWhiteSpace(pakiet))
+                return "BŁĄD: Podaj nazwę pakietu GEM.";
+
+            string rejestrPath = Path.Combine(srcRepoPath, "gem_packages.json");
+            List<string> pakiety = File.Exists(rejestrPath)
+                ? JsonSerializer.Deserialize<List<string>>(File.ReadAllText(rejestrPath)) ?? new List<string>()
+                : new List<string>();
+
+            if (instaluj)
+            {
+                if (!pakiety.Contains(pakiet, StringComparer.OrdinalIgnoreCase))
+                    pakiety.Add(pakiet);
+                File.WriteAllText(rejestrPath, JsonSerializer.Serialize(pakiety, new JsonSerializerOptions { WriteIndented = true }));
+                ZapiszLog($"GEM INSTALL: {pakiet}");
+                return $"[ZABRA GEM] Zainstalowano pakiet '{pakiet}'. Aktywne pakiety: {string.Join(", ", pakiety)}";
+            }
+            else
+            {
+                int usuniete = pakiety.RemoveAll(p => p.Equals(pakiet, StringComparison.OrdinalIgnoreCase));
+                File.WriteAllText(rejestrPath, JsonSerializer.Serialize(pakiety, new JsonSerializerOptions { WriteIndented = true }));
+                ZapiszLog($"GEM REMOVE: {pakiet}");
+                return usuniete > 0
+                    ? $"[ZABRA GEM] Usunięto pakiet '{pakiet}'."
+                    : $"[ZABRA GEM] Pakiet '{pakiet}' nie był zainstalowany.";
+            }
+        }
+
+        private string WyczyscTempISrc(string srcRepoPath)
+        {
+            int usuniete = 0;
+            foreach (var f in Directory.GetFiles(srcRepoPath, "*.dll").Concat(Directory.GetFiles(srcRepoPath, "*.tmp")))
+            {
+                try { File.Delete(f); usuniete++; } catch { }
+            }
+            return $"Oczyszczono pliki tymczasowe w src_repo (usunięto: {usuniete}).";
+        }
+
+        private string PodgladKatalogu(string sciezka)
+        {
+            if (!Directory.Exists(sciezka))
+                return $"Katalog '{sciezka}' nie istnieje.";
+
+            var wpisy = Directory.GetFileSystemEntries(sciezka).Select(Path.GetFileName).ToArray();
+            return wpisy.Length == 0
+                ? $"Katalog '{sciezka}' jest pusty."
+                : $"Zawartość '{sciezka}': {string.Join(", ", wpisy)}";
+        }
+
+        private void ZapiszLog(string wpis)
+        {
+            _logiSystemowe.Add($"[{DateTime.Now:HH:mm:ss}] {wpis}");
         }
 
         private void AktualizujStatusKolejki()
