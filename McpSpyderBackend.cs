@@ -20,6 +20,7 @@ namespace HobbyOS.PullPits.Spyder
     public class McpSpyderForm : Form
     {
         private TextBox txtApiKey;
+        private TextBox txtModel;
         private RichTextBox rtbChat;
         private TextBox txtInput;
         private Button btnSend;
@@ -40,10 +41,10 @@ ZASADY KRYTYCZNE:
 2. Użytkownik NIE WIDZI wiadomości z [CMD: ...] ani odpowiedzi [SYS_OUT]. Po otrzymaniu [SYS_OUT] odpowiedz użytkownikowi naturalnie po polsku.
 3. OBOWIĄZEK SPRAWDZANIA FOLDERU: Zawsze, gdy użytkownik pyta o rzeczy grzebiące w pamięci lub plikach (pobieranie, otwieranie, usuwanie, lista plików, status repozytorium, uruchamianie pull-pitów), NAJPIERW w kroku 1 wywołaj [CMD: io-current], aby sprawdzić w jakim folderze się znajdujesz!
 4. LIMIT KOLEJKI PAMIĘCI: Przy operacjach grzebiących w pamięci/plikach możesz wykonać maksymalnie od 1 do 3 komend po kolei w jednym zadaniu, po czym musisz udzielić odpowiedzi użytkownikowi.
-DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
 
+DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
 - SYSTEM UPRAWNIEŃ GEM: gem install, gem remove
-- INTERFEJS I GITHUB: pulpit-start (otwieranie innego kontenera .cs [pull-pit] , fetch (pobieranie), src-list, src-path, src-count, src-clean, src-status
+- INTERFEJS I GITHUB: pulpit-start, fetch, src-list, src-path, src-count, src-clean, src-status
 - METRYKI PROCESORA: cpu-cores, cpu-arch, cpu-os, cpu-uptime, cpu-tick
 - ANALIZATOR PAMIĘCI RAM: ram-allocated, ram-sterta, ram-peak, ram-threads, ram-status
 - PROCESY WINDOWS: ps-count, ps-current-id, ps-name, ps-priority, ps-time
@@ -57,32 +58,47 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
         public McpSpyderForm()
         {
             Text = "HobbyOS // SPYDER MCP AI [BACKEND - D HERO SH4RK]";
-            Size = new Size(820, 600);
+            Size = new Size(920, 620);
             BackColor = Color.FromArgb(18, 20, 26);
             ForeColor = Color.White;
             Font = new Font("Consolas", 10f);
 
-            var topPanel = new Panel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8) };
-            var lblKey = new Label { Text = "Gemini API Key:", AutoSize = true, Left = 10, Top = 12, ForeColor = Color.Cyan };
+            var topPanel = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(8) };
+
+            var lblKey = new Label { Text = "API Key:", AutoSize = true, Left = 10, Top = 13, ForeColor = Color.Cyan };
             txtApiKey = new TextBox
             {
-                Left = 140,
-                Top = 9,
-                Width = 420,
+                Left = 75,
+                Top = 10,
+                Width = 260,
                 UseSystemPasswordChar = true,
                 BackColor = Color.FromArgb(30, 34, 44),
                 ForeColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle
             };
+
+            var lblModel = new Label { Text = "Model:", AutoSize = true, Left = 345, Top = 13, ForeColor = Color.Gold };
+            txtModel = new TextBox
+            {
+                Left = 398,
+                Top = 10,
+                Width = 210,
+                Text = "gemini-3.8-flash",
+                BackColor = Color.FromArgb(30, 34, 44),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
             lblQueueStatus = new Label
             {
                 Text = "Kolejka: 0 | Tryb: BACKEND",
                 AutoSize = true,
-                Left = 575,
-                Top = 12,
+                Left = 620,
+                Top = 13,
                 ForeColor = Color.LimeGreen
             };
-            topPanel.Controls.AddRange(new Control[] { lblKey, txtApiKey, lblQueueStatus });
+
+            topPanel.Controls.AddRange(new Control[] { lblKey, txtApiKey, lblModel, txtModel, lblQueueStatus });
 
             rtbChat = new RichTextBox
             {
@@ -129,7 +145,7 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
             Controls.Add(topPanel);
             Controls.Add(bottomPanel);
 
-            LogujUI("[SPYDER BACKEND] Gotowy. Podłączono 53 polecenia HobbyOS Core. Kolejka aktywna.\n", Color.Yellow);
+            LogujUI("[SPYDER BACKEND] Gotowy. Podłączono 53 polecenia HobbyOS Core. Kolejka i auto-retry aktywne.\n", Color.Yellow);
         }
 
         private void DodajDoKolejki()
@@ -140,6 +156,12 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
             if (string.IsNullOrWhiteSpace(txtApiKey.Text))
             {
                 LogujUI("[BŁĄD] Wpisz najpierw klucz Gemini API u góry okna!\n", Color.OrangeRed);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(txtModel.Text))
+            {
+                LogujUI("[BŁĄD] Podaj nazwę modelu w polu Model!\n", Color.OrangeRed);
                 return;
             }
 
@@ -223,7 +245,6 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
                 }
                 else
                 {
-                    // Jeśli AI chciało zrobić >3 komend, wymuszamy podsumowanie
                     string czystaOdpowiedz = Regex.Replace(odpowiedzAI, @"\[CMD:.*?\]", "").Trim();
                     if (string.IsNullOrEmpty(czystaOdpowiedz))
                         czystaOdpowiedz = "Osiągnięto limit 3 operacji na pamięci w jednej kolejce. Zadanie zatrzymane.";
@@ -242,40 +263,71 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
 
         private async Task<string> ZapytajGeminiAsync()
         {
-            try
-            {
-                string apiKey = txtApiKey.Text.Trim();
-               string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={apiKey}";
+            string apiKey = txtApiKey.Text.Trim();
+            string model = txtModel.Text.Trim();
+            string url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
 
-                var payload = new
+            var payload = new
+            {
+                system_instruction = new
                 {
-                    system_instruction = new
-                    {
-                        parts = new[] { new { text = SYSTEM_PROMPT } }
-                    },
-                    contents = _historiaRozmowy
-                };
+                    parts = new[] { new { text = SYSTEM_PROMPT } }
+                },
+                contents = _historiaRozmowy
+            };
 
-                string json = JsonSerializer.Serialize(payload);
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                using var response = await _http.PostAsync(url, content);
-                string respText = await response.Content.ReadAsStringAsync();
+            string json = JsonSerializer.Serialize(payload);
+            const int MAX_PROB = 4;
 
-                if (!response.IsSuccessStatusCode)
-                    return $"Błąd API ({response.StatusCode}): {respText}";
-
-                using var doc = JsonDocument.Parse(respText);
-                return doc.RootElement
-                    .GetProperty("candidates")[0]
-                    .GetProperty("content")
-                    .GetProperty("parts")[0]
-                    .GetProperty("text")
-                    .GetString() ?? "";
-            }
-            catch (Exception ex)
+            for (int proba = 1; proba <= MAX_PROB; proba++)
             {
-                return $"Wyjątek połączenia: {ex.Message}";
+                try
+                {
+                    using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    using var response = await _http.PostAsync(url, content);
+                    string respText = await response.Content.ReadAsStringAsync();
+
+                    int statusCode = (int)response.StatusCode;
+                    bool przeciazenie = statusCode == 503 || statusCode == 429 ||
+                                         respText.Contains("UNAVAILABLE", StringComparison.OrdinalIgnoreCase) ||
+                                         respText.Contains("high demand", StringComparison.OrdinalIgnoreCase);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        if (przeciazenie && proba < MAX_PROB)
+                        {
+                            int opoznienieSek = proba * 2;
+                            LogujUI($"[AUTO-RETRY] Model '{model}' przeciążony ({statusCode}). Ponawiam za {opoznienieSek}s (próba {proba}/{MAX_PROB})...\n", Color.Gold);
+                            await Task.Delay(TimeSpan.FromSeconds(opoznienieSek));
+                            continue;
+                        }
+
+                        return $"Błąd API ({response.StatusCode}): {respText}";
+                    }
+
+                    using var doc = JsonDocument.Parse(respText);
+                    return doc.RootElement
+                        .GetProperty("candidates")[0]
+                        .GetProperty("content")
+                        .GetProperty("parts")[0]
+                        .GetProperty("text")
+                        .GetString() ?? "";
+                }
+                catch (Exception ex)
+                {
+                    if (proba < MAX_PROB)
+                    {
+                        int opoznienieSek = proba * 2;
+                        LogujUI($"[AUTO-RETRY] Błąd połączenia ({ex.Message}). Ponawiam za {opoznienieSek}s (próba {proba}/{MAX_PROB})...\n", Color.Gold);
+                        await Task.Delay(TimeSpan.FromSeconds(opoznienieSek));
+                        continue;
+                    }
+
+                    return $"Wyjątek połączenia: {ex.Message}";
+                }
             }
+
+            return "Nie udało się uzyskać odpowiedzi po ponownych próbach.";
         }
 
         // TUTAJ PODPINASZ SWOJE METODY Z JĄDRA D HERO SH4RK (53 KOMENDY)
