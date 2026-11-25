@@ -40,10 +40,10 @@ ZASADY KRYTYCZNE:
 2. Użytkownik NIE WIDZI wiadomości z [CMD: ...] ani odpowiedzi [SYS_OUT]. Po otrzymaniu [SYS_OUT] odpowiedz użytkownikowi naturalnie po polsku.
 3. OBOWIĄZEK SPRAWDZANIA FOLDERU: Zawsze, gdy użytkownik pyta o rzeczy grzebiące w pamięci lub plikach (pobieranie, otwieranie, usuwanie, lista plików, status repozytorium, uruchamianie pull-pitów), NAJPIERW w kroku 1 wywołaj [CMD: io-current], aby sprawdzić w jakim folderze się znajdujesz!
 4. LIMIT KOLEJKI PAMIĘCI: Przy operacjach grzebiących w pamięci/plikach możesz wykonać maksymalnie od 1 do 3 komend po kolei w jednym zadaniu, po czym musisz udzielić odpowiedzi użytkownikowi.
-
 DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
+
 - SYSTEM UPRAWNIEŃ GEM: gem install, gem remove
-- INTERFEJS I GITHUB: pulpit-start, fetch, src-list, src-path, src-count, src-clean, src-status
+- INTERFEJS I GITHUB: pulpit-start (otwieranie innego kontenera .cs [pull-pit] , fetch (pobieranie), src-list, src-path, src-count, src-clean, src-status
 - METRYKI PROCESORA: cpu-cores, cpu-arch, cpu-os, cpu-uptime, cpu-tick
 - ANALIZATOR PAMIĘCI RAM: ram-allocated, ram-sterta, ram-peak, ram-threads, ram-status
 - PROCESY WINDOWS: ps-count, ps-current-id, ps-name, ps-priority, ps-time
@@ -245,7 +245,7 @@ DOSTĘPNE 53 KOMENDY SYSTEMOWE HOBBYOS CORE:
             try
             {
                 string apiKey = txtApiKey.Text.Trim();
-                string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
+               string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={apiKey}";
 
                 var payload = new
                 {
